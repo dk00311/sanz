@@ -28,6 +28,8 @@ class Player:  # 플레이어
         self.rect = pygame.Rect(x, y, self.width, self.height)
         self.x = float(x)
         self.y = float(y)
+        self.on_ground = False
+        self.vel_y = 0
 
     def move(self):
         to_x = 0
@@ -35,19 +37,55 @@ class Player:  # 플레이어
 
         key_input = pygame.key.get_pressed()
         if key_input[pygame.K_a] and self.rect.x >= arena_x + 5:
-            to_x = -0.2
+            to_x = -0.3 * dt
 
         if key_input[pygame.K_d] and self.rect.x <= (arena_x + arena_width) - (self.width + 5):
-            to_x = 0.2
+            to_x = 0.3 * dt
 
         if key_input[pygame.K_s] and self.rect.y <= (arena_y + arena_height) - self.height - 5:
-            to_y = 0.2
+            to_y = 0.3 * dt
 
         if key_input[pygame.K_w] and self.rect.y >= arena_y + 5:
-            to_y = -0.2
+            to_y = -0.3 * dt
 
         self.x += to_x
         self.y += to_y
+
+        self.rect.x = int(self.x)
+        self.rect.y = int(self.y)
+
+    def jumping_move(self, type):
+        self.type = type
+        to_x = 0
+        key_input = pygame.key.get_pressed()
+
+        #좌우 이동 가능 체크
+        if self.type != "no_jump":
+            if key_input[pygame.K_a] and self.rect.x >= arena_x + 5:
+                to_x = -0.3 * dt
+
+            if key_input[pygame.K_d] and self.rect.x <= (arena_x + arena_width) - (self.width + 5):
+                to_x = 0.3 * dt
+
+        #점핑
+        if key_input[pygame.K_SPACE] and self.on_ground:
+            self.vel_y = -20 # 점프 힘
+            self.on_ground = False
+
+            # 스페이스를 빨리 떼면 → 상승력 약화
+        if not key_input[pygame.K_SPACE] and self.vel_y < -0.15:
+            self.vel_y = -0.15
+
+        gravity = 0.05
+        self.vel_y += gravity * dt
+
+        self.x += to_x
+        self.y += self.vel_y
+
+        if self.y + self.height >= arena_y + arena_height:
+            self.y = arena_y + arena_height - self.height
+            self.vel_y = 0
+            self.on_ground = True
 
         self.rect.x = int(self.x)
         self.rect.y = int(self.y)
@@ -57,15 +95,16 @@ class Player:  # 플레이어
 
 
 class RisingBone():
-    def __init__(self, direction, warn_speed, speed, length):
+    def __init__(self, direction, speed, length, grow_speed):
         self.direction = direction
-        self.warn_speed = warn_speed
-        self.speed = speed
+        self.warn_speed = speed[0]
+        self.speed = speed[1]
         self.length = length
         self.spawn_time = pygame.time.get_ticks()
         self.activate = False
         self.warn = None
         self.alive = True
+        self.grow_speed = grow_speed
         self.current_length = 0
         self.image = pygame.image.load(os.path.join(image_path, "Rising_bone.png")).convert_alpha()
         self.image = pygame.transform.rotate(self.image, 180)
@@ -97,7 +136,7 @@ class RisingBone():
             self.alive = False
 
         if self.activate and self.current_length <= self.length:
-            self.current_length += 0.7
+            self.current_length += self.grow_speed * dt
 
 
     def draw(self):
@@ -107,36 +146,95 @@ class RisingBone():
 
         else:
             #뼈 스케일링
-            self.image = pygame.transform.scale(self.base_image, (arena_width, self.current_length))
+            self.scaled = pygame.transform.scale(self.base_image, (arena_width, self.current_length))
 
 
             #뼈 그리기
             if self.direction == "up":
+                self.image = self.scaled
                 pos = (arena_x, arena_y)
 
             if self.direction == "down":
-                self.image = pygame.transform.rotate(self.image, 180)
+                self.image = pygame.transform.rotate(self.scaled, 180)
                 pos = (arena_x, arena_y + arena_height - self.current_length)
 
             if self.direction == "right":
-                self.image = pygame.transform.rotate(self.image, -90)
+                self.image = pygame.transform.rotate(self.scaled, -90)
                 pos = (arena_x + arena_width - self.current_length, arena_y)
 
             if self.direction == "left":
-                self.image = pygame.transform.rotate(self.image, 90)
+                self.image = pygame.transform.rotate(self.scaled, 90)
                 pos = (arena_x, arena_y)
 
             screen.blit(self.image, pos)
 
+class Bone(pygame.sprite.Sprite):
+    def __init__(self, pos, direction, rotate, size, speed):
+        pygame.sprite.Sprite.__init__(self)
+        self.x = pos[0]
+        self.y = pos[1]
+        self.direction = direction
+        self.rotate = rotate
+        self.size = size
+        self.speed = speed
+        self.image = pygame.image.load(os.path.join(image_path, "bone.png")).convert_alpha()
+        self.base_image = self.image
+
+    def make_bone(self):
+        self.scaled = pygame.transform.scale(self.image, self.size)
+        self.image = pygame.transform.rotate(self.scaled, self.rotate)
+        self.rect = self.image.get_rect(topleft=(self.x, self.y))
+
+    def update(self):
+
+        #rect 업데이트
+        self.rect.topleft = (self.x, self.y)
+        #움직임
+        if self.direction == "up":
+            self.y -= self.speed * dt
+
+        if self.direction == "down":
+            self.y += self.speed * dt
+
+        if self.direction == "right":
+            self.x += self.speed * dt
+
+        if self.direction == "left":
+            self.x -= self.speed * dt
+
+        #화면 밖으로 나가면 kill
+        if self.x <= arena_x or self.x >= (arena_x + arena_width):
+            self.kill()
+
+        if self.y <= arena_y or self.y >= (arena_y + arena_height):
+            self.kill()
+
+
+    def draw(self):
+        screen.blit(self.image, self.rect)
+
+
+
+def pattern_1():
+    for i in range(11):
+        boone = Bone((arena_x+15 + i * 25, arena_y), "down", 180, (20, 100), 0.5)
+        boone.make_bone()
+        boone.add(bones)
 
 
 # 클래스 변수
 player = Player(screen_width / 2, screen_height / 2 + 150)
 rising_bone = None
 
+bones = pygame.sprite.Group()
+
+
+clock = pygame.time.Clock()
+
 # 매인
 running = True
 while running:
+    dt = clock.tick(120)
 
     # 이벤트 감지 동작
     for event in pygame.event.get():
@@ -146,34 +244,18 @@ while running:
         if event.type == pygame.KEYDOWN:
 
             if event.key == pygame.K_1:
-                rising_bone = RisingBone("up", 500, 300, 180)
-                rising_bone.build_warn()
-
-            if event.key == pygame.K_2:
-                rising_bone = RisingBone("down", 500, 300, 180)
-                rising_bone.build_warn()
-
-            if event.key == pygame.K_3:
-                rising_bone = RisingBone("right", 500, 300, 180)
-                rising_bone.build_warn()
-
-            if event.key == pygame.K_4:
-                rising_bone = RisingBone("left", 500, 300, 180)
-                rising_bone.build_warn()
+                pattern_1()
 
     # 그리기
     screen.fill((0, 0, 0))
 
-    player.move()
+    player.jumping_move("jump")
     player.draw()
 
-    if rising_bone:
-        rising_bone.update()
+    for b in bones:
+        b.update()
+        b.draw()
 
-        if not rising_bone.alive:
-            rising_bone = None
-        else:
-            rising_bone.draw()
 
     pygame.draw.rect(screen, (255, 255, 255), arena, 5)
 
