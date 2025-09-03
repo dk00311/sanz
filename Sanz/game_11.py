@@ -1,6 +1,5 @@
 import pygame
 import os
-import time
 
 ##########################
 pygame.init()
@@ -54,9 +53,20 @@ class Player:  # 플레이어
         self.rect.x = int(self.x)
         self.rect.y = int(self.y)
 
+    def jump(self):
+        if self.on_ground:
+            self.on_ground = False
+            self.vel_y = -15
+
+    def jump_cut(self):
+        if self.vel_y < -1:
+            self.vel_y = -1
+
     def jumping_move(self, type):
         self.type = type
         to_x = 0
+
+        event = pygame.event.poll()
         key_input = pygame.key.get_pressed()
 
         #좌우 이동 가능 체크
@@ -68,24 +78,27 @@ class Player:  # 플레이어
                 to_x = 0.3 * dt
 
         #점핑
-        if key_input[pygame.K_SPACE] and self.on_ground:
-            self.vel_y = -20 # 점프 힘
-            self.on_ground = False
+        if key_input[pygame.K_SPACE]:
+            self.jump()
+        else:
+            self.jump_cut()
 
-            # 스페이스를 빨리 떼면 → 상승력 약화
-        if not key_input[pygame.K_SPACE] and self.vel_y < -0.15:
-            self.vel_y = -0.15
+        gravity = 0.1
 
-        gravity = 0.05
         self.vel_y += gravity * dt
 
         self.x += to_x
         self.y += self.vel_y
 
-        if self.y + self.height >= arena_y + arena_height:
-            self.y = arena_y + arena_height - self.height
+        #착지 판정
+        if self.y + self.height >= arena_y + arena_height-5:
+            self.y = arena_y + arena_height - self.height - 5
             self.vel_y = 0
             self.on_ground = True
+
+        # 중력 가속도 제한
+        if self.vel_y >= 10:
+            self.vel_y = 10
 
         self.rect.x = int(self.x)
         self.rect.y = int(self.y)
@@ -216,8 +229,14 @@ class Bone(pygame.sprite.Sprite):
 
 
 def pattern_1():
-    for i in range(11):
-        boone = Bone((arena_x+15 + i * 25, arena_y), "down", 180, (20, 100), 0.5)
+    for i in range(6):
+        boone = Bone((arena_x+15 + i * 50, arena_y), "down", 180, (20, 100), 0.3)
+        boone.make_bone()
+        boone.add(bones)
+
+def pattern_2():
+    for i in range(6):
+        boone = Bone((arena_x+30 + i * 50, arena_y+arena_height-100), "up", 0, (20, 100), 0.3)
         boone.make_bone()
         boone.add(bones)
 
@@ -245,6 +264,7 @@ while running:
 
             if event.key == pygame.K_1:
                 pattern_1()
+                pattern_2()
 
     # 그리기
     screen.fill((0, 0, 0))
