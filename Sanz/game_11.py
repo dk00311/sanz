@@ -1,5 +1,5 @@
 import random
-
+import math
 import pygame
 import os
 ##########################
@@ -18,6 +18,7 @@ arena_x = (screen_width - arena_width) / 2
 arena_y = screen_height - (arena_height + 50)
 
 arena = pygame.Rect(arena_x, arena_y, arena_width, arena_height, )
+count = 0
 
 # 클래스
 class Player:  # 플레이어
@@ -28,6 +29,7 @@ class Player:  # 플레이어
         self.x = float(x)
         self.y = float(y)
         self.vel_y = 0
+        self.color = (255, 0, 0)
 
         self.on_ground = False
         self.jump_pressed = False
@@ -46,6 +48,7 @@ class Player:  # 플레이어
     def move(self):
         to_x = 0
         to_y = 0
+        self.color = (255, 0, 0)
 
         key_input = pygame.key.get_pressed()
         if key_input[pygame.K_a] and self.rect.x >= arena_x + 5:
@@ -85,6 +88,7 @@ class Player:  # 플레이어
 
 
     def jumping_move(self, type):
+        self.color = (0, 0, 255)
         self.type = type
         self.gravity = 1500
         to_x = 0
@@ -144,7 +148,7 @@ class Player:  # 플레이어
                 print("ouch")
 
     def draw(self):
-        pygame.draw.rect(screen, (255, 0, 0), self.rect)
+        pygame.draw.rect(screen, self.color, self.rect)
 
 
 class RisingBone():
@@ -279,14 +283,17 @@ class Bone(pygame.sprite.Sprite):
         screen.blit(self.image, self.rect)
 
 
-def start_pattern(pattern, interval = 1000, loops = 10):
+def start_pattern(pattern, interval = 30, loops = 100):
+    global count
+
     pygame.time.set_timer(pattern, interval, loops=loops)
+    count = 0
 
 
 def stop_pattern(pattern):
     pygame.time.set_timer(pattern, 0)
 
-def spawn_bone_pattern_1():
+def spawn_bone_pattern_1(): # 800
     boone = Bone((arena_x + 7, arena_y + arena_height - 50), "right", 0, (20, 50), 200)
     boone.make_bone()
     boone.add(bones)
@@ -303,7 +310,7 @@ def spawn_bone_pattern_1():
     boone.make_bone()
     boone.add(bones)
 
-def spawn_bone_pattern_2():
+def spawn_bone_pattern_2(): # 1000
     height = random.choice([20, 50, 80])
 
     boone = Bone((arena_x + 7, arena_y + arena_height - height), "right", 0, (20, height), 200)
@@ -322,12 +329,26 @@ def spawn_bone_pattern_2():
     boone.make_bone()
     boone.add(bones)
 
-def spawn_bone_pattern_3():
+def spawn_bone_pattern_3(): # 900
     boone = Bone((arena_x + 7, arena_y + arena_height - 30), "right", 0, (20, 30), 150)
     boone.make_bone()
     boone.add(bones)
 
     boone = Bone((arena_x - 27 + arena_width, arena_y + 5), "left", 180, (20, 270), 150)
+    boone.make_bone()
+    boone.add(bones)
+
+def spawn_bone_pattern_4(): # 50, 45 / length = 60, 50, 45    /length = 60, 30, 100
+    global count
+    count += 1
+
+    length = (60 * math.sin(count / 5) + 70)
+    boone = Bone((arena_x + 7, arena_y + arena_height - 5 - length), "right", 0, (20, length), 1000)
+    boone.make_bone()
+    boone.add(bones)
+
+    length_2 = (-60 * math.sin(count / 5) + 120)
+    boone = Bone((arena_x + 7, arena_y+5), "right", 180, (20, length_2), 1000)
     boone.make_bone()
     boone.add(bones)
 
@@ -345,6 +366,7 @@ clock = pygame.time.Clock()
 bone_pattern_1 = pygame.USEREVENT + 1
 bone_pattern_2 = pygame.USEREVENT + 2
 bone_pattern_3 = pygame.USEREVENT + 3
+bone_pattern_4 = pygame.USEREVENT + 4
 
 
 # 매인
@@ -371,6 +393,9 @@ while running:
             spawn_bone_pattern_3()
             type = "jump"
 
+        if event.type == bone_pattern_4:
+            spawn_bone_pattern_4()
+
 
 
         if event.type == pygame.KEYDOWN:
@@ -389,6 +414,9 @@ while running:
             if event.key == pygame.K_4:
                 start_pattern(bone_pattern_3)
 
+            if event.key == pygame.K_5:
+                start_pattern(bone_pattern_4)
+
             if event.key == pygame.K_SPACE and player.on_ground == True:
                 player.jump()
 
@@ -400,7 +428,7 @@ while running:
     # 그리기
     screen.fill((0, 0, 0))
 
-    player.jumping_move(type)
+    player.move()
     player.draw()
     player.colid()
 
