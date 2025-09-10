@@ -301,97 +301,57 @@ class Bone(pygame.sprite.Sprite):
 
 
 class Blaster:
-    def __init__(self, pos, move_pos, move_ms, fire_ms, rotate_deg, size):
+    def __init__(self, pos, move_pos, move_ms, fire_ms, waiting_ms):
         # 위치
-        self.start_pos  = pygame.Vector2(pos)
+        self.start_pos = pygame.Vector2(pos)
         self.target_pos = pygame.Vector2(move_pos)
-        self.pos        = pygame.Vector2(pos)
+        self.pos = pygame.Vector2(pos)
 
         # 시간(초)
-        self.move_ms = float(move_ms) / 1000.0
-        self.fire_ms = float(fire_ms) / 1000.0
-        self.t = 0.0
+        self.move_ms = float(move_ms) / 1000
+        self.fire_ms = float(fire_ms) / 1000
+        self.waiting_ms = float(waiting_ms) / 1000
+        self.t = 0
 
-        # 상태
-        self.state = "charge"  # charge -> fire -> done
+        self.state = "charge"
 
-        # 각도/스케일
-        self.angle = float(rotate_deg)
-        self.size  = tuple(size)  # (w, h)
+        self.image = pygame.image.load(os.path.join(image_path, "blaster.png")).convert_alpha()
+        self.image = pygame.transform.scale(self.image, (200, 240))
+        self.rect = self.image.get_rect()
+        self.rect.center = (int(self.start_pos.x), int(self.start_pos.y))
 
-        # 이미지 준비
-        raw = pygame.image.load(os.path.join(image_path, "blaster.png")).convert_alpha()
-        self.base_image = pygame.transform.scale(raw, self.size)
-        self.base_image = pygame.transform.rotate(self.base_image, 90)
 
-        # 렌더용
-        self.body = self.base_image
-        self.rect = self.body.get_rect(center=(int(self.pos.x), int(self.pos.y)))
-        self.muzzle = self.rect.center
 
-        # 빔 (오른쪽 기준으로 만들어두고 회전해서 사용)
-        self.beam_base = pygame.Surface((1000, 100), pygame.SRCALPHA)  # (length, width)
-        self.beam_base.fill((255, 255, 255))
-        self.beam_rect = pygame.Rect(0, 0, 0, 0)
 
-        self.kill = False
-
-    def is_done(self):
-        return self.state == "done"
-
-    def _update_transform(self):
-        """회전된 본체, rect, muzzle 갱신"""
-        self.body = pygame.transform.rotate(self.base_image, self.angle)
-        self.rect = self.body.get_rect(center=(int(self.pos.x), int(self.pos.y)))
-        # 간단히 중심을 총구로 사용 (원하면 오프셋로 보정 가능)
-        self.muzzle = self.rect.center
-
-    def update(self, dt):
+    def update(self):
         self.t += dt
 
         if self.state == "charge":
-            # 시간 기반 보간 (lerp): 이동 종료 여부는 t로 판정
-            if self.move_ms <= 0:
-                self.pos.update(self.target_pos)
-            else:
-                progress = min(1.0, self.t / self.move_ms)
-                self.pos = self.start_pos.lerp(self.target_pos, progress)
-
             if self.t >= self.move_ms:
+                self.state = "wait"
+                self.t = 0
+
+            else:
+                to_x = (self.target_pos.x - self.start_pos.x) / self.move_ms
+                to_y = (self.target_pos.y - self.start_pos.y) / self.move_ms
+
+                self.rect.x += to_x * dt
+                self.rect.y += to_y * dt
+
+        elif self.state == "wait":
+            if self.t >= self.waiting_ms:
+                self.t = 0
                 self.state = "fire"
-                self.t = 0.0
 
         elif self.state == "fire":
             if self.t >= self.fire_ms:
+                self.t = 0
                 self.state = "done"
-                self.t = 0.0
-
-        else:
-            self.kill = True
-
-        # 변환 갱신(항상)
-        self._update_transform()
-
-    def draw(self, screen):
-        # 발사 중이면 빔 먼저(또는 나중) 그리기
-        if self.state == "fire":
-            rotated = pygame.transform.rotate(self.beam_base, self.angle)
-            rect = rotated.get_rect()
-            rect.midtop = self.muzzle  # 오른쪽 기준 빔의 왼쪽 중앙을 총구에 딱 붙임
-            screen.blit(rotated, rect)
-            self.beam_rect = rect
-
-        else:
-            self.beam_rect = pygame.Rect(0,0,0,0)
-
-        if self.kill == False:
-            screen.blit(self.body, self.rect.topleft)
 
 
-    def hits(self, target_rect: pygame.Rect):
-        return self.state == "fire" and self.beam_rect.colliderect(target_rect)
 
-
+    def draw(self):
+        screen.blit(self.image, self.rect)
 
 
 def start_pattern(pattern, interval, loops):
@@ -492,7 +452,7 @@ type = "jump"
 
 bones = pygame.sprite.Group()
 clock = pygame.time.Clock()
-bs = Blaster((0, 0), (0, 0), 0, 0, 0, (0, 0))
+bs = Blaster((-1000, -100), (0, 0), 0, 0, 0)
 
 # 보스 패턴 관련 변수
 bone_pattern_1 = pygame.USEREVENT + 1
@@ -534,7 +494,7 @@ while running:
         if event.type == pygame.KEYDOWN:
 
            if event.key == pygame.K_1:
-               bs = Blaster((640, -100), (640, 200), 1000, 600, 270, (270, 200))
+               bs = Blaster((640, -100), (640, 200), 1000, 600, 1000)
 
 
            if event.key == pygame.K_2:
@@ -596,8 +556,8 @@ while running:
         else:
             rb.draw()
 
-    bs.update(dt)
-    bs.draw(screen)
+    bs.update()
+    bs.draw()
 
     ouch_text = myFont.render(str(ouch), True, (255, 0, 0))
     screen.blit(ouch_text, (0, 0))
