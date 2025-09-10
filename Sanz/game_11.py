@@ -22,6 +22,8 @@ arena = pygame.Rect(arena_x, arena_y, arena_width, arena_height, )
 count = 0
 
 is_jump= False
+ouch = 0
+myFont = pygame.font.SysFont(None, 50)
 
 
 # 클래스
@@ -48,6 +50,10 @@ class Player:  # 플레이어
         self.hover_time = 0
         self.is_hovering = False
         self.has_hovered = False
+
+        self.enum = False
+        self.enum_time = 0.1
+        self.time = 0
 
     def move(self):
         to_x = 0
@@ -143,9 +149,22 @@ class Player:  # 플레이어
         self.rect.y = int(self.y)
 
     def colid(self):
+
+        global ouch
         for boone in bones:
             if self.rect.colliderect(boone.rect):
-                print("ouch")
+                if self.enum == False:
+                    ouch += 1
+                    self.enum = True
+
+                else:
+
+                    self.time += dt
+                    if self.enum_time <= self.time:
+                        self.enum = False
+                        self.time = 0
+
+
 
     def draw(self):
         pygame.draw.rect(screen, self.color, self.rect)
@@ -371,8 +390,6 @@ def spawn_bone_pattern_5(direction):
 
     boone.make_bone()
     boone.add(bones)
-    print(length)
-
 # 클래스 변수
 player = Player(screen_width / 2, screen_height / 2 + 150)
 rb = None
@@ -480,6 +497,9 @@ while running:
             rb = None
         else:
             rb.draw()
+
+    ouch_text = myFont.render(str(ouch), True, (255, 0, 0))
+    screen.blit(ouch_text, (0, 0))
 
     pygame.draw.rect(screen, (255, 255, 255), arena, 5)
 
