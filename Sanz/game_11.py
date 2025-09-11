@@ -300,8 +300,9 @@ class Bone(pygame.sprite.Sprite):
         screen.blit(self.image, self.rect)
 
 
-class Blaster:
+class Blaster(pygame.sprite.Sprite):
     def __init__(self, pos, move_pos, move_ms, fire_ms, waiting_ms):
+        pygame.sprite.Sprite.__init__(self)
         # 위치
         self.start_pos = pygame.Vector2(pos)
         self.target_pos = pygame.Vector2(move_pos)
@@ -316,11 +317,12 @@ class Blaster:
         self.state = "charge"
 
         self.image = pygame.image.load(os.path.join(image_path, "blaster.png")).convert_alpha()
-        self.image = pygame.transform.scale(self.image, (200, 240))
+        self.image = pygame.transform.scale(self.image, (100, 240))
         self.rect = self.image.get_rect()
         self.rect.center = (int(self.start_pos.x), int(self.start_pos.y))
 
-
+        self.beam_base = pygame.Surface((0, 1000))
+        self.beam_rect = self.beam_base.get_rect()
 
 
     def update(self):
@@ -347,11 +349,44 @@ class Blaster:
             if self.t >= self.fire_ms:
                 self.t = 0
                 self.state = "done"
+            else:
 
+                self.beam_rect.midtop = self.rect.center
+                self.beam_base.fill((255, 255, 255))
+
+
+                progress = self.t / self.fire_ms  # 0~1
+                max_thickness = 70
+
+                if progress < 0.5:  # 처음 20% 동안만 굵어짐
+                    thickness = int(max_thickness * (progress / 0.5))
+                else:  # 그 이후는 굵기 유지
+                    thickness = max_thickness
+
+                self.beam_rect.width = thickness
+
+        elif self.state == "done":
+            if self.t >= self.move_ms:
+                self.t = 0
+                self.kill()
+
+            else:
+                to_x = (self.start_pos.x - self.target_pos.x) / self.move_ms * 2
+                to_y = (self.start_pos.y - self.target_pos.y) / self.move_ms * 2
+
+                self.rect.x += to_x * dt
+                self.rect.y += to_y * dt
+
+
+                self.beam_rect.x += to_x * dt
+                self.beam_rect.y += to_y * dt
 
 
     def draw(self):
         screen.blit(self.image, self.rect)
+        screen.blit(self.beam_base, self.beam_rect)
+        pygame.draw.rect(screen, (255, 0, 0), self.rect, 1)
+        pygame.draw.rect(screen, (255, 0, 0), self.beam_rect, 1)
 
 
 def start_pattern(pattern, interval, loops):
@@ -452,7 +487,7 @@ type = "jump"
 
 bones = pygame.sprite.Group()
 clock = pygame.time.Clock()
-bs = Blaster((-1000, -100), (0, 0), 0, 0, 0)
+blasters = pygame.sprite.Group()
 
 # 보스 패턴 관련 변수
 bone_pattern_1 = pygame.USEREVENT + 1
@@ -495,6 +530,7 @@ while running:
 
            if event.key == pygame.K_1:
                bs = Blaster((640, -100), (640, 200), 1000, 600, 1000)
+               bs.add(blasters)
 
 
            if event.key == pygame.K_2:
@@ -556,8 +592,9 @@ while running:
         else:
             rb.draw()
 
-    bs.update()
-    bs.draw()
+    for bs in blasters:
+        bs.update()
+        bs.draw()
 
     ouch_text = myFont.render(str(ouch), True, (255, 0, 0))
     screen.blit(ouch_text, (0, 0))
