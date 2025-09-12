@@ -266,6 +266,7 @@ class Bone(pygame.sprite.Sprite):
         self.image = pygame.image.load(os.path.join(image_path, "bone.png")).convert_alpha()
         self.base_image = self.image
 
+
     def make_bone(self):
         self.scaled = pygame.transform.scale(self.image, self.size)
         self.image = pygame.transform.rotate(self.scaled, self.rotate)
@@ -323,7 +324,7 @@ class Blaster(pygame.sprite.Sprite):
 
         self.gun_offset = pygame.Vector2(0, self.base_image.get_height() // 2)
 
-
+        self.thickness = 0
         self.rotate = rotate
 
         self.beam_base = pygame.Surface((0, 1000))
@@ -363,11 +364,11 @@ class Blaster(pygame.sprite.Sprite):
                 max_thickness = 70
 
                 if progress < 0.1:  # 처음 20% 동안만 굵어짐
-                    thickness = int(max_thickness * (progress / 0.1))
+                    self.thickness = int(max_thickness * (progress / 0.1))
                 else:  # 그 이후는 굵기 유지
-                    thickness = max_thickness
+                    self.thickness = max_thickness
 
-                self.beam_rect.width = thickness
+                self.beam_rect.width = self.thickness
 
         elif self.state == "done":
             if self.t >= self.move_ms:
@@ -379,7 +380,8 @@ class Blaster(pygame.sprite.Sprite):
                 if self.t / self.move_ms >= 0.7:
 
                     progress = self.t / self.move_ms * 70
-                    self.beam_rect.width = 70 - progress
+                    self.thickness = 70 - progress
+                    self.beam_rect.width = self.thickness
 
 
 
@@ -393,28 +395,45 @@ class Blaster(pygame.sprite.Sprite):
                 self.beam_rect.x += to_x * dt
                 self.beam_rect.y += to_y * dt
 
+    def _muzzle_world(self):
+        # self.image, self.rect는 update() 마지막에 갱신되어 있다고 가정
+        h = self.base_image.get_height()
+        muzzle_local = pygame.Vector2(0, h / 2)  # 중앙 아래
+        off = muzzle_local.rotate(self.rotate)  # 이미지 회전과 같은 부호
+        return pygame.Vector2(self.rect.centerx + off.x,
+                              self.rect.centery + off.y)
+
+    def _draw_beam_poly(self, muzzle, angle_deg, length, thickness, color=(255, 255, 255)):
+        # 방향 벡터(f): “위로”(0,-1)를 기준으로 angle만큼 회전
+        f = pygame.Vector2(0, 1).rotate(-angle_deg)  # 발사 방향
+        n = pygame.Vector2(-f.y, f.x)  # f에 수직(왼쪽) 단위벡터
+        half = thickness * 0.5
+
+        tip = muzzle + f * length
+
+        # 사각형 네 꼭짓점 (시계/반시계 아무거나 일관되게)
+        p1 = muzzle + n * half
+        p2 = muzzle - n * half
+        p3 = tip - n * half
+        p4 = tip + n * half
+
+        # 반투명 색을 쓰려면 Surface 하나 만들어서 blit
+        surf = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
+        pygame.draw.polygon(surf, color, (p1, p2, p3, p4))
+        screen.blit(surf, (0, 0))
+
     def draw(self):
+        print(self.thickness)
         screen.blit(self.image, self.rect)
 
-        if self.state not in ("charge", "wait"):
+        if self.state in ("fire", "done"):
 
-            self.beam_base = pygame.Surface((self.beam_rect.width, self.beam_rect.height), pygame.SRCALPHA)
-            self.beam_base.fill((255, 255, 255))
+            muzzle = self._muzzle_world()
 
-            rotated_beam = pygame.transform.rotate(self.beam_base, self.rotate)
+            thickness = self.thickness
+            length = 1000
 
-            rotated_offset = self.gun_offset.rotate(-self.rotate)
-            gun_pos = (self.rect.centerx + rotated_offset.x,
-                       self.rect.centery + rotated_offset.y)
-
-            rotated_beam_rect = rotated_beam.get_rect(midtop=gun_pos)
-
-            screen.blit(rotated_beam, rotated_beam_rect)
-            pygame.draw.rect(screen, (255, 0, 0), rotated_beam_rect, 5)
-
-            pygame.draw.circle(screen, (255, 0, 0), gun_pos, 5)
-
-
+            self._draw_beam_poly(muzzle, self.rotate, length, thickness)
 
 
 def start_pattern(pattern, interval, loops):
@@ -557,7 +576,7 @@ while running:
         if event.type == pygame.KEYDOWN:
 
            if event.key == pygame.K_1:
-               bs = Blaster((640, -100), (640, 200), 500, 800, 700, 45)
+               bs = Blaster((640, -100), (640, 200), 500, 800, 700, 70)
                bs.add(blasters)
 
 
