@@ -301,7 +301,7 @@ class Bone(pygame.sprite.Sprite):
 
 
 class Blaster(pygame.sprite.Sprite):
-    def __init__(self, pos, move_pos, move_ms, fire_ms, waiting_ms):
+    def __init__(self, pos, move_pos, move_ms, fire_ms, waiting_ms, rotate):
         pygame.sprite.Sprite.__init__(self)
         # 위치
         self.start_pos = pygame.Vector2(pos)
@@ -317,16 +317,24 @@ class Blaster(pygame.sprite.Sprite):
         self.state = "charge"
 
         self.image = pygame.image.load(os.path.join(image_path, "blaster.png")).convert_alpha()
-        self.image = pygame.transform.scale(self.image, (100, 240))
-        self.rect = self.image.get_rect()
+        self.base_image = pygame.transform.scale(self.image, (100, 240))
+        self.rect = self.base_image.get_rect()
         self.rect.center = (int(self.start_pos.x), int(self.start_pos.y))
+
+        self.gun_offset = pygame.Vector2(0, self.base_image.get_height() // 2)
+
+
+        self.rotate = rotate
 
         self.beam_base = pygame.Surface((0, 1000))
         self.beam_rect = self.beam_base.get_rect()
 
 
+
     def update(self):
         self.t += dt
+        self.image = pygame.transform.rotate(self.base_image, self.rotate)
+        self.rect = self.image.get_rect(center=self.rect.center)
 
         if self.state == "charge":
             if self.t >= self.move_ms:
@@ -351,15 +359,11 @@ class Blaster(pygame.sprite.Sprite):
                 self.state = "done"
             else:
 
-                self.beam_rect.midtop = self.rect.center
-                self.beam_base.fill((255, 255, 255))
-
-
                 progress = self.t / self.fire_ms  # 0~1
                 max_thickness = 70
 
-                if progress < 0.5:  # 처음 20% 동안만 굵어짐
-                    thickness = int(max_thickness * (progress / 0.5))
+                if progress < 0.1:  # 처음 20% 동안만 굵어짐
+                    thickness = int(max_thickness * (progress / 0.1))
                 else:  # 그 이후는 굵기 유지
                     thickness = max_thickness
 
@@ -371,6 +375,14 @@ class Blaster(pygame.sprite.Sprite):
                 self.kill()
 
             else:
+
+                if self.t / self.move_ms >= 0.7:
+
+                    progress = self.t / self.move_ms * 70
+                    self.beam_rect.width = 70 - progress
+
+
+
                 to_x = (self.start_pos.x - self.target_pos.x) / self.move_ms * 2
                 to_y = (self.start_pos.y - self.target_pos.y) / self.move_ms * 2
 
@@ -381,12 +393,28 @@ class Blaster(pygame.sprite.Sprite):
                 self.beam_rect.x += to_x * dt
                 self.beam_rect.y += to_y * dt
 
-
     def draw(self):
         screen.blit(self.image, self.rect)
-        screen.blit(self.beam_base, self.beam_rect)
-        pygame.draw.rect(screen, (255, 0, 0), self.rect, 1)
-        pygame.draw.rect(screen, (255, 0, 0), self.beam_rect, 1)
+
+        if self.state not in ("charge", "wait"):
+
+            self.beam_base = pygame.Surface((self.beam_rect.width, self.beam_rect.height), pygame.SRCALPHA)
+            self.beam_base.fill((255, 255, 255))
+
+            rotated_beam = pygame.transform.rotate(self.beam_base, self.rotate)
+
+            rotated_offset = self.gun_offset.rotate(-self.rotate)
+            gun_pos = (self.rect.centerx + rotated_offset.x,
+                       self.rect.centery + rotated_offset.y)
+
+            rotated_beam_rect = rotated_beam.get_rect(midtop=gun_pos)
+
+            screen.blit(rotated_beam, rotated_beam_rect)
+            pygame.draw.rect(screen, (255, 0, 0), rotated_beam_rect, 5)
+
+            pygame.draw.circle(screen, (255, 0, 0), gun_pos, 5)
+
+
 
 
 def start_pattern(pattern, interval, loops):
@@ -529,7 +557,7 @@ while running:
         if event.type == pygame.KEYDOWN:
 
            if event.key == pygame.K_1:
-               bs = Blaster((640, -100), (640, 200), 1000, 600, 1000)
+               bs = Blaster((640, -100), (640, 200), 500, 800, 700, 45)
                bs.add(blasters)
 
 
