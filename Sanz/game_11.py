@@ -399,7 +399,10 @@ class Blaster(pygame.sprite.Sprite):
         # self.image, self.rect는 update() 마지막에 갱신되어 있다고 가정
         h = self.base_image.get_height()
         muzzle_local = pygame.Vector2(0, h / 2)  # 중앙 아래
-        off = muzzle_local.rotate(self.rotate)  # 이미지 회전과 같은 부호
+        # 이미지 회전 각도에 맞춰 총구 위치를 회전시킨다.
+        # pygame.transform.rotate는 반시계 방향이 양수이므로
+        # 실제 화면에서의 총구 위치는 음수 각도로 보정한다.
+        off = muzzle_local.rotate(-self.rotate)
         return pygame.Vector2(self.rect.centerx + off.x,
                               self.rect.centery + off.y)
 
