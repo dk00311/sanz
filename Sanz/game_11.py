@@ -56,6 +56,7 @@ class Player:  # 플레이어
         self.time = 0
 
         self.gravity = False
+        self.surf = pygame.Surface((self.width, self.height))
 
     def move(self):
         to_x = 0
@@ -169,6 +170,8 @@ class Player:  # 플레이어
 
     def colid(self):
         global ouch
+        self.mask = pygame.mask.from_surface(self.surf)
+
         for boone in bones:
             if self.rect.colliderect(boone.rect):
                 if self.enum == False:
@@ -193,6 +196,8 @@ class Player:  # 플레이어
                 if self.enum_time <= self.time:
                     self.enum = False
                     self.time = 0.03
+
+
 
 
     def draw(self):
@@ -331,133 +336,147 @@ class Bone(pygame.sprite.Sprite):
 
 class Blaster(pygame.sprite.Sprite):
     def __init__(self, pos, move_pos, move_ms, fire_ms, waiting_ms, rotate, size=1):
-        pygame.sprite.Sprite.__init__(self)
-        # 위치
-        self.start_pos = pygame.Vector2(pos)
+        super().__init__()
+        # 위치(부동소수점 중심)
+        self.start_pos  = pygame.Vector2(pos)
         self.target_pos = pygame.Vector2(move_pos)
-        self.pos = pygame.Vector2(pos)
+        self.pos        = pygame.Vector2(pos)
 
         # 시간(초)
-        self.move_ms = float(move_ms) / 1000
-        self.fire_ms = float(fire_ms) / 1000
-        self.waiting_ms = float(waiting_ms) / 1000
-        self.t = 0
+        self.move_ms    = float(move_ms) / 1000.0
+        self.fire_ms    = float(fire_ms) / 1000.0
+        self.waiting_ms = float(waiting_ms) / 1000.0
+        self.t          = 0.0
 
-        self.state = "charge"
-
-        self.size = size
-        self.image = pygame.image.load(os.path.join(image_path, "blaster.png")).convert_alpha()
-        self.base_image = pygame.transform.scale(self.image, (100 * self.size, 240 * self.size))
-        self.rect = self.base_image.get_rect()
-        self.rect.center = (int(self.start_pos.x), int(self.start_pos.y))
-
-        self.gun_offset = pygame.Vector2(0, self.base_image.get_height() // 2)
-
+        self.state   = "charge"
+        self.size    = size
+        self.rotate  = float(rotate)     # 0=아래, +CW
         self.thickness = 0
-        self.rotate = rotate
-        self.beam_base = pygame.Surface((1, 1))
+
+        # 본체 이미지
+        raw = pygame.image.load(os.path.join(image_path, "blaster.png")).convert_alpha()
+        self.base_image = pygame.transform.scale(raw, (100 * self.size, 240 * self.size))
+        self.image = self.base_image
+        self.rect  = self.image.get_rect(center=(int(self.pos.x), int(self.pos.y)))
+
+        # 총구(중앙 아래) 기준 오프셋
+        self.gun_offset = pygame.Vector2(0, self.base_image.get_height() / 2)
+
+        # 빔 기본 이미지(투명 포함)
+        self.beam_base = pygame.Surface((1, 1), pygame.SRCALPHA)
         self.beam_base.fill((255, 255, 255))
 
 
+        self.beam_mask = None
+        self.beam_rect = None
 
+    # ---------------- core helpers ----------------
+    def _update_transform(self):
+        # 규약: 0=아래, +CW → rotate(-angle)로 통일
+        self.image = pygame.transform.rotate(self.base_image, self.rotate)
+        self.rect  = self.image.get_rect(center=(int(self.pos.x), int(self.pos.y)))
+
+    def _muzzle_world(self):
+        # 총구: base_image의 중앙 아래에서 -rotate만큼 회전한 오프셋을 pos에 더함
+        off = self.gun_offset.rotate(-self.rotate)
+        return pygame.Vector2(self.pos.x + off.x, self.pos.y + off.y)
+
+    def _draw_beam(self, screen, muzzle, length, thickness):
+        if thickness <= 0:
+            self.beam_mask = None
+            self.beam_rect = None
+            return
+        L = max(1, int(length))
+        T = max(1, int(thickness))
+
+        scaled  = pygame.transform.smoothscale(self.beam_base, (T, L))
+        self.rotated = pygame.transform.rotate(scaled, self.rotate)
+
+        # 미회전 기준 (0, L/2) 오프셋을 -rotate로 돌려서 center를 총구에 정렬
+        off = pygame.Vector2(0, L/2).rotate(-self.rotate)
+        center = (muzzle.x + off.x, muzzle.y + off.y)
+
+        rect = self.rotated.get_rect(center=(int(center[0]), int(center[1])))
+        screen.blit(self.rotated, rect.topleft)
+
+        self.beam_rect = rect
+        self.beam_mask = pygame.mask.from_surface(self.rotated)
+
+    def hits_player_rect(self, player_rect: pygame.Rect) -> bool:
+        if not self.beam_mask or not self.beam_rect:
+            return False
+        # 플레이어를 꽉 찬 사각형 마스크로 한 번만 만들거나, 아래처럼 매번 만들어도 됨
+        psurf = pygame.Surface((player_rect.w, player_rect.h), pygame.SRCALPHA)
+        psurf.fill((255, 255, 255, 255))
+        pmask = pygame.mask.from_surface(psurf)
+
+        # other(플레이어)를 this(빔) 기준으로 이동시키는 오프셋
+        offset = (player_rect.x - self.beam_rect.x,
+                  player_rect.y - self.beam_rect.y)
+        return self.beam_mask.overlap(pmask, offset) is not None
+
+
+    # ---------------- state machine ----------------
     def update(self):
         self.t += dt
-        self.image = pygame.transform.rotate(self.base_image, self.rotate)
-        self.rect = self.image.get_rect(center=self.rect.center)
 
         if self.state == "charge":
             if self.t >= self.move_ms:
-                self.state = "wait"
-                self.t = 0
-
+                self.pos.update(self.target_pos)
+                self.state, self.t = "wait", 0.0
             else:
-                to_x = (self.target_pos.x - self.start_pos.x) / self.move_ms
-                to_y = (self.target_pos.y - self.start_pos.y) / self.move_ms
-
-                self.rect.x += to_x * dt
-                self.rect.y += to_y * dt
+                progress = min(1.0, self.t / self.move_ms)
+                self.pos = self.start_pos.lerp(self.target_pos, progress)
 
         elif self.state == "wait":
             if self.t >= self.waiting_ms:
-                self.t = 0
-                self.state = "fire"
+                self.state, self.t = "fire", 0.0
 
         elif self.state == "fire":
             if self.t >= self.fire_ms:
-                self.t = 0
-                self.state = "done"
+                self.state, self.t = "done", 0.0
             else:
-
-                progress = self.t / self.fire_ms  # 0~1
-                max_thickness = (100 * self.size) * 6 / 5
-
-                if progress < 0.1:  # 처음 20% 동안만 굵어짐
+                # 두께 이징(초반만 커지게)
+                progress = self.t / self.fire_ms
+                max_thickness = int((100 * self.size) * 6 / 5)
+                if progress < 0.1:
                     self.thickness = int(max_thickness * (progress / 0.1))
-                else:  # 그 이후는 굵기 유지
+                else:
                     self.thickness = max_thickness
 
         elif self.state == "done":
             if self.t >= self.move_ms:
-                self.t = 0
+                self.pos.update(self.start_pos)
                 self.kill()
-
+                return
             else:
+                progress = min(1.0, self.t / self.move_ms)
+                self.pos = self.target_pos.lerp(self.start_pos, progress)
+                # 마지막 30%에서 서서히 얇아지기
+                max_thickness = int((100 * self.size) * 6 / 5)
+                if progress >= 0.7:
+                    fade = (progress - 0.7) / 0.3
+                    self.thickness = max(0, int((1.0 - fade) * max_thickness))
+                else:
+                    self.thickness = max_thickness
 
-                if self.t / self.move_ms >= 0.7:
-
-                    progress = self.t / self.move_ms * 70
-                    self.thickness = 70 - progress
-
-
-
-                to_x = (self.start_pos.x - self.target_pos.x) / self.move_ms * 2
-                to_y = (self.start_pos.y - self.target_pos.y) / self.move_ms * 2
-
-                self.pos.x += to_x * dt
-                self.pos.y += to_y * dt
-
-                # self.beam_base.x += to_x * dt
-                # self.beam_base.y += to_y * dt
-
-    def _muzzle_world(self):
-        # self.image, self.rect는 update() 마지막에 갱신되어 있다고 가정
-        h = self.base_image.get_height()
-        muzzle_local = pygame.Vector2(0, h / 2)  # 중앙 아래
-        off = muzzle_local.rotate(-self.rotate)  # 이미지 회전과 같은 부호
-        return pygame.Vector2(self.rect.centerx + off.x,
-                              self.rect.centery + off.y)
-
-
-    def draw_beam(self, screen, muzzle, length, thickness):
-        scaled = pygame.transform.smoothscale(self.beam_base, (thickness, length))
-        rotated = pygame.transform.rotate(scaled, -self.rotate)
-
-        off = pygame.Vector2(0, length / 2).rotate(-self.rotate)
-        center = (muzzle.x + off.x, muzzle.y + off.y)
-        rect = rotated.get_rect(center=(int(center[0]), int(center[1])))
-
-        screen.blit(rotated, rect.topleft)
+        # 항상 마지막에 변환 갱신 (rect는 여기서만 만질 것!)
+        self._update_transform()
 
     def draw(self):
-        if self.state in ("fire", "done"):
-
+        # 레이저 먼저(또는 나중) 그려도 OK
+        if self.state in ("fire", "done") and self.thickness > 0:
             muzzle = self._muzzle_world()
-            length = 1000
+            self._draw_beam(screen, muzzle, length=1000, thickness=self.thickness)
 
-            self.draw_beam(screen, muzzle, length, self.thickness)
-
+        # 본체
         screen.blit(self.image, self.rect)
 
     def look_at(self, player_pos):
-        # 플레이어와 블래스터 중심 좌표 차이
+        # 0=아래, +CW 규약에 맞춘 각도
         dx = player_pos[0] - self.pos.x
         dy = player_pos[1] - self.pos.y
-
-        # atan2는 (x축 기준, 반시계 CCW) → 우리 규약(0=아래, +CW)에 맞추기
-        angle = math.degrees(math.atan2(dx, dy))  # (dx, dy) 순서 중요!
-        self.rotate = angle
-
-
+        self.rotate = math.degrees(math.atan2(dx, dy))
 
 
 def start_pattern(pattern, interval, loops):
@@ -657,7 +676,7 @@ while running:
         if event.type == pygame.KEYDOWN:
 
            if event.key == pygame.K_1:
-                start_pattern(blaster_pattern_1, 800, 30)
+                start_pattern(blaster_pattern_1, 800, 10)
 
            if event.key == pygame.K_2:
                 start_pattern(bone_pattern_2, 800, 10)
