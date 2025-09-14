@@ -55,6 +55,8 @@ class Player:  # 플레이어
         self.enum_time = 0.07
         self.time = 0
 
+        self.gravity = False
+
     def move(self):
         to_x = 0
         to_y = 0
@@ -72,6 +74,23 @@ class Player:  # 플레이어
 
         if key_input[pygame.K_w] and self.rect.y >= arena_y + 5:
             to_y = -300 * dt
+
+        if rb != None and rb.alive and not rb.activate and self.gravity == False:
+            if rb.direction == "up":
+                self.y = arena_y + 5
+                self.gravity = True
+
+            if rb.direction == "down":
+                self.y = arena_y + arena_height - 5
+                self.gravity = True
+
+            if rb.direction == "left":
+                self.x = arena_x + 5
+                self.gravity = True
+
+            if rb.direction == "right":
+                self.x = arena_x + arena_width - 5
+                self.gravity = True
 
         self.x += to_x
         self.y += to_y
@@ -149,7 +168,6 @@ class Player:  # 플레이어
         self.rect.y = int(self.y)
 
     def colid(self):
-
         global ouch
         for boone in bones:
             if self.rect.colliderect(boone.rect):
@@ -164,6 +182,17 @@ class Player:  # 플레이어
                         self.enum = False
                         self.time = 0
 
+        if rb != None and rb.activate and self.rect.colliderect(rb.rect):
+            if self.enum == False:
+                ouch += 1
+                self.enum = True
+
+            else:
+
+                self.time += dt
+                if self.enum_time <= self.time:
+                    self.enum = False
+                    self.time = 0.03
 
 
     def draw(self):
@@ -215,15 +244,14 @@ class RisingBone():
             self.activate = True
             self.spawn_time = now
 
-        if self.activate and now - self.spawn_time >= self.speed:
-            self.alive = False
-
         if self.activate and self.current_length <= self.length:
             self.current_length += self.grow_speed * dt
 
+        if self.activate and now - self.spawn_time >= self.speed:
+            self.alive = False
+            player.gravity = False
+
         self.rect = self.image.get_rect(topleft=(self.x, self.y))
-        if self.rect.colliderect(player.rect):
-            print("ouch")
 
     def draw(self):
         pos = 0
@@ -302,7 +330,7 @@ class Bone(pygame.sprite.Sprite):
 
 
 class Blaster(pygame.sprite.Sprite):
-    def __init__(self, pos, move_pos, move_ms, fire_ms, waiting_ms, rotate):
+    def __init__(self, pos, move_pos, move_ms, fire_ms, waiting_ms, rotate, size=1):
         pygame.sprite.Sprite.__init__(self)
         # 위치
         self.start_pos = pygame.Vector2(pos)
@@ -317,8 +345,9 @@ class Blaster(pygame.sprite.Sprite):
 
         self.state = "charge"
 
+        self.size = size
         self.image = pygame.image.load(os.path.join(image_path, "blaster.png")).convert_alpha()
-        self.base_image = pygame.transform.scale(self.image, (100, 240))
+        self.base_image = pygame.transform.scale(self.image, (100 * self.size, 240 * self.size))
         self.rect = self.base_image.get_rect()
         self.rect.center = (int(self.start_pos.x), int(self.start_pos.y))
 
@@ -326,9 +355,8 @@ class Blaster(pygame.sprite.Sprite):
 
         self.thickness = 0
         self.rotate = rotate
-
-        self.beam_base = pygame.Surface((0, 1000))
-        self.beam_rect = self.beam_base.get_rect()
+        self.beam_base = pygame.Surface((1, 1))
+        self.beam_base.fill((255, 255, 255))
 
 
 
@@ -361,14 +389,12 @@ class Blaster(pygame.sprite.Sprite):
             else:
 
                 progress = self.t / self.fire_ms  # 0~1
-                max_thickness = 70
+                max_thickness = (100 * self.size) * 6 / 5
 
                 if progress < 0.1:  # 처음 20% 동안만 굵어짐
                     self.thickness = int(max_thickness * (progress / 0.1))
                 else:  # 그 이후는 굵기 유지
                     self.thickness = max_thickness
-
-                self.beam_rect.width = self.thickness
 
         elif self.state == "done":
             if self.t >= self.move_ms:
@@ -381,59 +407,57 @@ class Blaster(pygame.sprite.Sprite):
 
                     progress = self.t / self.move_ms * 70
                     self.thickness = 70 - progress
-                    self.beam_rect.width = self.thickness
 
 
 
                 to_x = (self.start_pos.x - self.target_pos.x) / self.move_ms * 2
                 to_y = (self.start_pos.y - self.target_pos.y) / self.move_ms * 2
 
-                self.rect.x += to_x * dt
-                self.rect.y += to_y * dt
+                self.pos.x += to_x * dt
+                self.pos.y += to_y * dt
 
-
-                self.beam_rect.x += to_x * dt
-                self.beam_rect.y += to_y * dt
+                # self.beam_base.x += to_x * dt
+                # self.beam_base.y += to_y * dt
 
     def _muzzle_world(self):
         # self.image, self.rect는 update() 마지막에 갱신되어 있다고 가정
         h = self.base_image.get_height()
         muzzle_local = pygame.Vector2(0, h / 2)  # 중앙 아래
-        off = muzzle_local.rotate(self.rotate)  # 이미지 회전과 같은 부호
+        off = muzzle_local.rotate(-self.rotate)  # 이미지 회전과 같은 부호
         return pygame.Vector2(self.rect.centerx + off.x,
                               self.rect.centery + off.y)
 
-    def _draw_beam_poly(self, muzzle, angle_deg, length, thickness, color=(255, 255, 255)):
-        # 방향 벡터(f): “위로”(0,-1)를 기준으로 angle만큼 회전
-        f = pygame.Vector2(0, 1).rotate(-angle_deg)  # 발사 방향
-        n = pygame.Vector2(-f.y, f.x)  # f에 수직(왼쪽) 단위벡터
-        half = thickness * 0.5
 
-        tip = muzzle + f * length
+    def draw_beam(self, screen, muzzle, length, thickness):
+        scaled = pygame.transform.smoothscale(self.beam_base, (thickness, length))
+        rotated = pygame.transform.rotate(scaled, -self.rotate)
 
-        # 사각형 네 꼭짓점 (시계/반시계 아무거나 일관되게)
-        p1 = muzzle + n * half
-        p2 = muzzle - n * half
-        p3 = tip - n * half
-        p4 = tip + n * half
+        off = pygame.Vector2(0, length / 2).rotate(-self.rotate)
+        center = (muzzle.x + off.x, muzzle.y + off.y)
+        rect = rotated.get_rect(center=(int(center[0]), int(center[1])))
 
-        # 반투명 색을 쓰려면 Surface 하나 만들어서 blit
-        surf = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
-        pygame.draw.polygon(surf, color, (p1, p2, p3, p4))
-        screen.blit(surf, (0, 0))
+        screen.blit(rotated, rect.topleft)
 
     def draw(self):
-        print(self.thickness)
-        screen.blit(self.image, self.rect)
-
         if self.state in ("fire", "done"):
 
             muzzle = self._muzzle_world()
-
-            thickness = self.thickness
             length = 1000
 
-            self._draw_beam_poly(muzzle, self.rotate, length, thickness)
+            self.draw_beam(screen, muzzle, length, self.thickness)
+
+        screen.blit(self.image, self.rect)
+
+    def look_at(self, player_pos):
+        # 플레이어와 블래스터 중심 좌표 차이
+        dx = player_pos[0] - self.pos.x
+        dy = player_pos[1] - self.pos.y
+
+        # atan2는 (x축 기준, 반시계 CCW) → 우리 규약(0=아래, +CW)에 맞추기
+        angle = math.degrees(math.atan2(dx, dy))  # (dx, dy) 순서 중요!
+        self.rotate = angle
+
+
 
 
 def start_pattern(pattern, interval, loops):
@@ -527,6 +551,57 @@ def spawn_bone_pattern_5(direction):
 
     boone.make_bone()
     boone.add(bones)
+
+def spawn_bs_pattern_1():
+    bs = Blaster((arena_x + arena_width / 3, -100), (arena_x + arena_width / 3, 200), 400, 800, 700, 0)
+    bs.add(blasters)
+
+    bs = Blaster((arena_x + arena_width / 3 * 2, -100), (arena_x + arena_width / 3 * 2, 200), 400, 800, 700, 0)
+    bs.add(blasters)
+
+    bs = Blaster((-100, arena_y + 30), (200, arena_y + 30), 400, 800, 700, 90)
+    bs.add(blasters)
+
+    bs = Blaster((-100, arena_y + arena_height - 30), (200, arena_y + arena_height - 30), 400, 800, 700, 90)
+    bs.add(blasters)
+
+def spawn_bs_pattern_2():
+    bs = Blaster((arena_x - 500, arena_y - 500), (arena_x - 100, arena_y - 100), 400, 800, 700, 45)
+    bs.add(blasters)
+
+    bs = Blaster((arena_x + arena_width + 500, arena_y - 500), (arena_x + arena_width + 100, arena_y - 100), 400, 800, 700, -45)
+    bs.add(blasters)
+
+def spawn_bs_pattern_3():
+    bs = Blaster((-100, arena_y + arena_height / 2), (200, arena_y + arena_height / 2), 400, 800, 700, 90, 2)
+    bs.add(blasters)
+
+    bs = Blaster((screen_width + 100, arena_y + arena_height / 2), (screen_width - 200, arena_y + arena_height / 2), 400, 800, 700, -90, 2)
+    bs.add(blasters)
+
+def spawn_bs_pattern_4():
+    direction = random.choice([1, 2, 3, 4])
+    if direction == 1:
+        bs = Blaster((screen_width + 100, -100), (arena_x + arena_width, arena_y), 400, 500, 600, 90, 1)
+        bs.look_at(player.rect.center)
+        bs.add(blasters)
+
+    if direction == 2:
+        bs = Blaster((-100, -100), (arena_x, arena_y), 400, 500, 600, 90, 1)
+        bs.look_at(player.rect.center)
+        bs.add(blasters)
+
+    if direction == 3:
+        bs = Blaster((-100, screen_height + 100), (arena_x, arena_y + arena_height), 400, 500, 600, 90, 1)
+        bs.look_at(player.rect.center)
+        bs.add(blasters)
+
+    if direction == 4:
+        bs = Blaster((screen_width + 100, screen_height + 100), (arena_x + arena_width, arena_y + arena_height), 400, 500, 600, 90, 1)
+        bs.look_at(player.rect.center)
+        bs.add(blasters)
+
+
 # 클래스 변수
 player = Player(screen_width / 2, screen_height / 2 + 150)
 rb = None
@@ -542,6 +617,9 @@ bone_pattern_2 = pygame.USEREVENT + 2
 bone_pattern_3 = pygame.USEREVENT + 3
 bone_pattern_4 = pygame.USEREVENT + 4
 bone_pattern_5 = pygame.USEREVENT + 5
+
+blaster_pattern_1 = pygame.USEREVENT + 10
+blaster_pattern_2 = pygame.USEREVENT + 11
 
 # 매인
 running = True
@@ -573,12 +651,13 @@ while running:
         if event.type == bone_pattern_5:
             spawn_bone_pattern_5("left")
 
+        if event.type == blaster_pattern_1:
+            spawn_bs_pattern_4()
+
         if event.type == pygame.KEYDOWN:
 
            if event.key == pygame.K_1:
-               bs = Blaster((640, -100), (640, 200), 500, 800, 700, 70)
-               bs.add(blasters)
-
+                start_pattern(blaster_pattern_1, 800, 30)
 
            if event.key == pygame.K_2:
                 start_pattern(bone_pattern_2, 800, 10)
@@ -586,7 +665,7 @@ while running:
                 type = "only_jump"
 
            if event.key == pygame.K_3:
-                rb = RisingBone("up", (100, 500), 150, 600)
+                rb = RisingBone("up", (300, 500), 150, 500)
                 is_jump = False
                 rb.build_warn()
 
