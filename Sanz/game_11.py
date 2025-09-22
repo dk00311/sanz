@@ -27,8 +27,9 @@ myFont = pygame.font.SysFont(None, 50)
 
 
 # 클래스
-class Player:  # 플레이어
+class Player(pygame.sprite.Sprite):  # 플레이어
     def __init__(self, x, y):
+        super().__init__()
         self.width = 20
         self.height = 20
         self.rect = pygame.Rect(x, y, self.width, self.height)
@@ -57,6 +58,7 @@ class Player:  # 플레이어
 
         self.gravity = False
         self.surf = pygame.Surface((self.width, self.height))
+        self.mask = pygame.mask.from_surface(self.surf)
 
     def move(self):
         to_x = 0
@@ -98,6 +100,7 @@ class Player:  # 플레이어
 
         self.rect.x = int(self.x)
         self.rect.y = int(self.y)
+        self.mask = pygame.mask.from_surface(self.surf)
 
     def jump(self):
         if self.on_ground:
@@ -167,10 +170,10 @@ class Player:  # 플레이어
 
         self.rect.x = int(self.x)
         self.rect.y = int(self.y)
+        self.mask = pygame.mask.from_surface(self.surf)
 
     def colid(self):
         global ouch
-        self.mask = pygame.mask.from_surface(self.surf)
 
         for boone in bones:
             if self.rect.colliderect(boone.rect):
@@ -198,10 +201,26 @@ class Player:  # 플레이어
                     self.time = 0.03
 
 
+        for bs in blasters:
+            if bs.check_hit(self):
+                if self.enum == False:
+                    ouch += 1
+                    self.enum = True
 
+                else:
+
+                    self.time += dt
+                    if self.enum_time <= self.time:
+                        self.enum = False
+                        self.time = 0.03
 
     def draw(self):
-        pygame.draw.rect(screen, self.color, self.rect)
+        screen.blit(self.surf, self.rect)
+        self.surf.fill((0, 0, 0, 0))  # 서피스를 매 프레임 지우고
+        pygame.draw.rect(self.surf, self.color, (0, 0, self.width, self.height))
+        if self.mask:
+            debug_surf = self.mask.to_surface(setcolor=(255, 0, 0, 100), unsetcolor=(0, 0, 0, 0))
+            screen.blit(debug_surf, self.rect.topleft)
 
 
 class RisingBone():
@@ -337,12 +356,10 @@ class Bone(pygame.sprite.Sprite):
 class Blaster(pygame.sprite.Sprite):
     def __init__(self, pos, move_pos, move_ms, fire_ms, waiting_ms, rotate, size=1):
         super().__init__()
-        # 위치(부동소수점 중심)
         self.start_pos  = pygame.Vector2(pos)
         self.target_pos = pygame.Vector2(move_pos)
         self.pos        = pygame.Vector2(pos)
 
-        # 시간(초)
         self.move_ms    = float(move_ms) / 1000.0
         self.fire_ms    = float(fire_ms) / 1000.0
         self.waiting_ms = float(waiting_ms) / 1000.0
@@ -353,68 +370,49 @@ class Blaster(pygame.sprite.Sprite):
         self.rotate  = float(rotate)     # 0=아래, +CW
         self.thickness = 0
 
-        # 본체 이미지
         raw = pygame.image.load(os.path.join(image_path, "blaster.png")).convert_alpha()
         self.base_image = pygame.transform.scale(raw, (100 * self.size, 240 * self.size))
         self.image = self.base_image
         self.rect  = self.image.get_rect(center=(int(self.pos.x), int(self.pos.y)))
 
-        # 총구(중앙 아래) 기준 오프셋
         self.gun_offset = pygame.Vector2(0, self.base_image.get_height() / 2)
 
-        # 빔 기본 이미지(투명 포함)
         self.beam_base = pygame.Surface((1, 1), pygame.SRCALPHA)
         self.beam_base.fill((255, 255, 255))
 
-
-        self.beam_mask = None
-        self.beam_rect = None
+        self.mask = None        # 현재 빔의 mask
+        self.beam_rect = None   # 현재 빔의 rect
 
     # ---------------- core helpers ----------------
     def _update_transform(self):
-        # 규약: 0=아래, +CW → rotate(-angle)로 통일
         self.image = pygame.transform.rotate(self.base_image, self.rotate)
         self.rect  = self.image.get_rect(center=(int(self.pos.x), int(self.pos.y)))
 
     def _muzzle_world(self):
-        # 총구: base_image의 중앙 아래에서 -rotate만큼 회전한 오프셋을 pos에 더함
         off = self.gun_offset.rotate(-self.rotate)
         return pygame.Vector2(self.pos.x + off.x, self.pos.y + off.y)
 
     def _draw_beam(self, screen, muzzle, length, thickness):
         if thickness <= 0:
-            self.beam_mask = None
+            self.mask = None
             self.beam_rect = None
             return
+
         L = max(1, int(length))
         T = max(1, int(thickness))
 
         scaled  = pygame.transform.smoothscale(self.beam_base, (T, L))
-        self.rotated = pygame.transform.rotate(scaled, self.rotate)
+        rotated = pygame.transform.rotate(scaled, self.rotate)
 
-        # 미회전 기준 (0, L/2) 오프셋을 -rotate로 돌려서 center를 총구에 정렬
         off = pygame.Vector2(0, L/2).rotate(-self.rotate)
         center = (muzzle.x + off.x, muzzle.y + off.y)
 
-        rect = self.rotated.get_rect(center=(int(center[0]), int(center[1])))
-        screen.blit(self.rotated, rect.topleft)
+        rect = rotated.get_rect(center=(int(center[0]), int(center[1])))
+        screen.blit(rotated, rect.topleft)
 
+        # 여기서 beam용 mask와 rect 저장
+        self.mask = pygame.mask.from_surface(rotated)
         self.beam_rect = rect
-        self.beam_mask = pygame.mask.from_surface(self.rotated)
-
-    def hits_player_rect(self, player_rect: pygame.Rect) -> bool:
-        if not self.beam_mask or not self.beam_rect:
-            return False
-        # 플레이어를 꽉 찬 사각형 마스크로 한 번만 만들거나, 아래처럼 매번 만들어도 됨
-        psurf = pygame.Surface((player_rect.w, player_rect.h), pygame.SRCALPHA)
-        psurf.fill((255, 255, 255, 255))
-        pmask = pygame.mask.from_surface(psurf)
-
-        # other(플레이어)를 this(빔) 기준으로 이동시키는 오프셋
-        offset = (player_rect.x - self.beam_rect.x,
-                  player_rect.y - self.beam_rect.y)
-        return self.beam_mask.overlap(pmask, offset) is not None
-
 
     # ---------------- state machine ----------------
     def update(self):
@@ -436,7 +434,6 @@ class Blaster(pygame.sprite.Sprite):
             if self.t >= self.fire_ms:
                 self.state, self.t = "done", 0.0
             else:
-                # 두께 이징(초반만 커지게)
                 progress = self.t / self.fire_ms
                 max_thickness = int((100 * self.size) * 6 / 5)
                 if progress < 0.1:
@@ -452,7 +449,6 @@ class Blaster(pygame.sprite.Sprite):
             else:
                 progress = min(1.0, self.t / self.move_ms)
                 self.pos = self.target_pos.lerp(self.start_pos, progress)
-                # 마지막 30%에서 서서히 얇아지기
                 max_thickness = int((100 * self.size) * 6 / 5)
                 if progress >= 0.7:
                     fade = (progress - 0.7) / 0.3
@@ -460,23 +456,31 @@ class Blaster(pygame.sprite.Sprite):
                 else:
                     self.thickness = max_thickness
 
-        # 항상 마지막에 변환 갱신 (rect는 여기서만 만질 것!)
         self._update_transform()
 
-    def draw(self):
-        # 레이저 먼저(또는 나중) 그려도 OK
+    def draw(self, screen):
         if self.state in ("fire", "done") and self.thickness > 0:
             muzzle = self._muzzle_world()
             self._draw_beam(screen, muzzle, length=1000, thickness=self.thickness)
+        else:
+            self.mask = None
+            self.beam_rect = None
 
-        # 본체
         screen.blit(self.image, self.rect)
 
     def look_at(self, player_pos):
-        # 0=아래, +CW 규약에 맞춘 각도
         dx = player_pos[0] - self.pos.x
         dy = player_pos[1] - self.pos.y
         self.rotate = math.degrees(math.atan2(dx, dy))
+
+    # ---------------- 충돌 체크 ----------------
+    def check_hit(self, player):
+        if self.mask and self.beam_rect and player.mask:
+            offset = (player.rect.x - self.beam_rect.x,
+                      player.rect.y - self.beam_rect.y)
+            return self.mask.overlap(player.mask, offset) is not None
+        return False
+
 
 
 def start_pattern(pattern, interval, loops):
@@ -488,6 +492,8 @@ def start_pattern(pattern, interval, loops):
 
 def stop_pattern(pattern):
     pygame.time.set_timer(pattern, 0)
+
+
 
 
 def spawn_bone_pattern_1():  # 800
@@ -713,6 +719,7 @@ while running:
             if event.key == pygame.K_SPACE:
                 player.jump_cut()
 
+
     # 그리기
     screen.fill((0, 0, 0))
 
@@ -739,7 +746,8 @@ while running:
 
     for bs in blasters:
         bs.update()
-        bs.draw()
+        bs.draw(screen)
+
 
     ouch_text = myFont.render(str(ouch), True, (255, 0, 0))
     screen.blit(ouch_text, (0, 0))
