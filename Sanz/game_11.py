@@ -13,19 +13,18 @@ screen_width = 1280
 screen_height = 720
 screen = pygame.display.set_mode((screen_width, screen_height))
 
-arena_width = 700  # 700
+arena_width = 300  # 700
 arena_height = 300
 arena_x = (screen_width - arena_width) / 2
-arena_y = screen_height - (arena_height + 50)
+arena_y = screen_height - (arena_height + 150)
 
-arena = pygame.Rect(arena_x, arena_y, arena_width, arena_height, )
 count = 0
 
 is_jump= False
 ouch = 0
 myFont = pygame.font.SysFont(None, 50)
 
-
+####################################################
 # 클래스
 class Player(pygame.sprite.Sprite):  # 플레이어
     def __init__(self, x, y):
@@ -81,6 +80,7 @@ class Player(pygame.sprite.Sprite):  # 플레이어
         if rb != None and rb.alive and not rb.activate and self.gravity == False:
             if rb.direction == "up":
                 self.y = arena_y + 5
+                to_y = 0
                 self.gravity = True
 
             if rb.direction == "down":
@@ -215,12 +215,7 @@ class Player(pygame.sprite.Sprite):  # 플레이어
                         self.time = 0.03
 
     def draw(self):
-        screen.blit(self.surf, self.rect)
-        self.surf.fill((0, 0, 0, 0))  # 서피스를 매 프레임 지우고
-        pygame.draw.rect(self.surf, self.color, (0, 0, self.width, self.height))
-        if self.mask:
-            debug_surf = self.mask.to_surface(setcolor=(255, 0, 0, 100), unsetcolor=(0, 0, 0, 0))
-            screen.blit(debug_surf, self.rect.topleft)
+        pygame.draw.rect(screen, self.color, self.rect)
 
 
 class RisingBone():
@@ -353,8 +348,8 @@ class Bone(pygame.sprite.Sprite):
         screen.blit(self.image, self.rect)
 
 
-class Blaster(pygame.sprite.Sprite):
-    def __init__(self, pos, move_pos, move_ms, fire_ms, waiting_ms, rotate, size=1):
+class Blaster(pygame.sprite.Sprite):   # size = 100, 240
+    def __init__(self, pos, move_pos, move_ms, fire_ms, waiting_ms, rotate, size):
         super().__init__()
         self.start_pos  = pygame.Vector2(pos)
         self.target_pos = pygame.Vector2(move_pos)
@@ -366,12 +361,12 @@ class Blaster(pygame.sprite.Sprite):
         self.t          = 0.0
 
         self.state   = "charge"
-        self.size    = size
+        self.size = size
         self.rotate  = float(rotate)     # 0=아래, +CW
         self.thickness = 0
 
         raw = pygame.image.load(os.path.join(image_path, "blaster.png")).convert_alpha()
-        self.base_image = pygame.transform.scale(raw, (100 * self.size, 240 * self.size))
+        self.base_image = pygame.transform.scale(raw, size)
         self.image = self.base_image
         self.rect  = self.image.get_rect(center=(int(self.pos.x), int(self.pos.y)))
 
@@ -435,7 +430,7 @@ class Blaster(pygame.sprite.Sprite):
                 self.state, self.t = "done", 0.0
             else:
                 progress = self.t / self.fire_ms
-                max_thickness = int((100 * self.size) * 6 / 5)
+                max_thickness = int(self.size[0] * 6 / 5)
                 if progress < 0.1:
                     self.thickness = int(max_thickness * (progress / 0.1))
                 else:
@@ -449,7 +444,7 @@ class Blaster(pygame.sprite.Sprite):
             else:
                 progress = min(1.0, self.t / self.move_ms)
                 self.pos = self.target_pos.lerp(self.start_pos, progress)
-                max_thickness = int((100 * self.size) * 6 / 5)
+                max_thickness = int(self.size[0] * 6 / 5)
                 if progress >= 0.7:
                     fade = (progress - 0.7) / 0.3
                     self.thickness = max(0, int((1.0 - fade) * max_thickness))
@@ -482,16 +477,96 @@ class Blaster(pygame.sprite.Sprite):
         return False
 
 
+class PatternManager:
+    def __init__(self):
+        # (func, interval_ms, loops, min_clear_ms, delay_ms)
+        self.queue = []
+        self.i = -1
+        self.active_func = None
+        self.count = 0
+        self.started_at = 0
+        self.loops = 0
+        self.state = "idle"
+        self.wait_until = 0
 
-def start_pattern(pattern, interval, loops):
-    global count
+    def add(self, func, interval_ms, loops, min_clear_ms=0, delay_ms=0):
+        """delay_ms = 패턴 종료 후 다음 패턴 시작까지의 대기시간"""
+        self.queue.append((func, interval_ms, loops, min_clear_ms, delay_ms))
 
-    pygame.time.set_timer(pattern, interval, loops=loops)
-    count = 0
+    def start(self):
+        self.i = -1
+        self.next()
+
+    def next(self):
+        global is_jump, type
+        self.i += 1
+        if self.i >= len(self.queue):
+            pygame.time.set_timer(PATTERN_EVENT, 0)
+            self.active_func = None
+            self.state = "idle"
+            print("\033[96m" + "축하해!" + "\033[97m" + "가서 맛있는 간식을 받도록 해! :)")
+            return
+
+        func, interval, loops, min_clear_ms, delay_ms = self.queue[self.i]
+        self.active_func = func
+
+        if self.active_func == spawn_bone_pattern_3 or self.active_func == spawn_bone_pattern_5_1 or self.active_func == spawn_bone_pattern_5_2:
+            is_jump = True
+            type = "A"
+
+        elif self.active_func == spawn_bone_pattern_1 or self.active_func ==  spawn_bone_pattern_2:
+            player.x = screen_width / 2
+            is_jump = True
+            type = "only_jump"
+
+        else:
+            is_jump = False
+
+        # if self.active_func == spawn_bone_pattern_1 or spawn_bone_pattern_2:
+        #     is_jump = True
+        #     type = "only_jump"
+        #
+        # elif self.active_func == spawn_bone_pattern_3 or spawn_bone_pattern_5 or spawn_bs_pattern_6:
+        #     is_jump = True
+        #     type = "a"
+        # else:
+        #     is_jump = False
+
+        self.count = 0
+        self.loops = loops
+        self.started_at = pygame.time.get_ticks()
+        self.state = "active"
+        self.delay_ms = delay_ms
+        pygame.time.set_timer(PATTERN_EVENT, interval, loops=loops)
+
+    def on_event(self):
+        if self.state == "active" and self.active_func:
+            self.active_func()
+            self.count += 1
 
 
-def stop_pattern(pattern):
-    pygame.time.set_timer(pattern, 0)
+    def update(self, bones, blasters, rb):
+        global count
+        now = pygame.time.get_ticks()
+
+        if self.state == "waiting":
+            if now >= self.wait_until:
+                self.next()
+            return
+
+        if self.state == "active" and self.active_func:
+            _, _, loops, min_clear_ms, delay_ms = self.queue[self.i]
+
+            finished_loops = (self.count >= loops)
+            cleared = (len(bones) == 0) and (len(blasters) == 0) and (rb is None)
+            enough_time = (now - self.started_at) >= min_clear_ms
+
+            if finished_loops and cleared and enough_time:
+                # 대기 상태로 전환
+                self.state = "waiting"
+                count = 0
+                self.wait_until = now + delay_ms
+                pygame.time.set_timer(PATTERN_EVENT, 0)  # 이벤트 정지
 
 
 
@@ -550,17 +625,17 @@ def spawn_bone_pattern_4():  # 50, 45 / length = 60, 50, 45    /length = 60, 30,
     global count
     count += 1
 
-    length = (60 * math.sin(count / 5) + 70)
+    length = (60 * math.sin(count / 5) + 80)
     boone = Bone((arena_x + 7, arena_y + arena_height - 5 - length), "right", 0, (20, length), 1000)
     boone.make_bone()
     boone.add(bones)
 
-    length_2 = (-60 * math.sin(count / 5) + 120)
+    length_2 = (-60 * math.sin(count / 5) + 130)
     boone = Bone((arena_x + 7, arena_y + 5), "right", 180, (20, length_2), 1000)
     boone.make_bone()
     boone.add(bones)
 
-def spawn_bone_pattern_5(direction):
+def spawn_bone_pattern_5_1():
     global count
     count += 1
 
@@ -569,82 +644,152 @@ def spawn_bone_pattern_5(direction):
     else:
         length = 30
 
-    if direction == "left":
-        boone = Bone((arena_x + 7, arena_y + arena_height - length), "right", 0, (20, length), 900)
-    else:
-        boone = Bone((arena_x - 27 + arena_width, arena_y + arena_height - length), "left", 0, (20, length), 900)
+    boone = Bone((arena_x + 7, arena_y + arena_height - length), "right", 0, (20, length), 900)
 
     boone.make_bone()
     boone.add(bones)
 
+
+def spawn_bone_pattern_5_2():
+    global count
+    count += 1
+    if count <= 15:
+        length = 130
+    else:
+        length = 30
+
+    boone = Bone((arena_x - 27 + arena_width, arena_y + arena_height - length), "left", 0, (20, length), 900)
+    boone.make_bone()
+    boone.add(bones)
+
+
 def spawn_bs_pattern_1():
-    bs = Blaster((arena_x + arena_width / 3, -100), (arena_x + arena_width / 3, 200), 400, 800, 700, 0)
+    bs = Blaster((arena_x + arena_width - 70, -100), (arena_x + arena_width - 70, 200), 400, 800, 700, 0, (70, 210))
     bs.add(blasters)
 
-    bs = Blaster((arena_x + arena_width / 3 * 2, -100), (arena_x + arena_width / 3 * 2, 200), 400, 800, 700, 0)
+    bs = Blaster((arena_x + 70, -100), (arena_x + 70, 200), 400, 800, 700, 0, (70, 210))
     bs.add(blasters)
 
-    bs = Blaster((-100, arena_y + 30), (200, arena_y + 30), 400, 800, 700, 90)
+    bs = Blaster((-100, arena_y + 70), (200, arena_y + 70), 400, 800, 700, 90, (70, 210))
     bs.add(blasters)
 
-    bs = Blaster((-100, arena_y + arena_height - 30), (200, arena_y + arena_height - 30), 400, 800, 700, 90)
+    bs = Blaster((-100, arena_y + arena_height - 70), (200, arena_y + arena_height - 70), 400, 800, 700, 90, (70, 210))
     bs.add(blasters)
 
 def spawn_bs_pattern_2():
-    bs = Blaster((arena_x - 500, arena_y - 500), (arena_x - 100, arena_y - 100), 400, 800, 700, 45)
+    bs = Blaster((arena_x - 500, arena_y - 500), (arena_x - 100, arena_y - 100), 400, 800, 700, 45, (100, 240))
     bs.add(blasters)
 
-    bs = Blaster((arena_x + arena_width + 500, arena_y - 500), (arena_x + arena_width + 100, arena_y - 100), 400, 800, 700, -45)
+    bs = Blaster((arena_x + arena_width + 500, arena_y - 500), (arena_x + arena_width + 100, arena_y - 100), 400, 800, 700, -45, (100, 240))
     bs.add(blasters)
 
 def spawn_bs_pattern_3():
-    bs = Blaster((-100, arena_y + arena_height / 2), (200, arena_y + arena_height / 2), 400, 800, 700, 90, 2)
+    bs = Blaster((-100, arena_y + arena_height / 2), (200, arena_y + arena_height / 2), 400, 800, 700, 90, (200, 480))
     bs.add(blasters)
 
-    bs = Blaster((screen_width + 100, arena_y + arena_height / 2), (screen_width - 200, arena_y + arena_height / 2), 400, 800, 700, -90, 2)
+    bs = Blaster((screen_width + 100, arena_y + arena_height / 2), (screen_width - 200, arena_y + arena_height / 2), 400, 800, 700, -90, (200, 480))
     bs.add(blasters)
 
 def spawn_bs_pattern_4():
     direction = random.choice([1, 2, 3, 4])
     if direction == 1:
-        bs = Blaster((screen_width + 100, -100), (arena_x + arena_width, arena_y), 400, 500, 600, 90, 1)
+        bs = Blaster((screen_width + 100, -100), (arena_x + arena_width, arena_y), 400, 500, 600, 90, (100, 240))
         bs.look_at(player.rect.center)
         bs.add(blasters)
 
     if direction == 2:
-        bs = Blaster((-100, -100), (arena_x, arena_y), 400, 500, 600, 90, 1)
+        bs = Blaster((-100, -100), (arena_x, arena_y), 400, 500, 600, 90, (100, 240))
         bs.look_at(player.rect.center)
         bs.add(blasters)
 
     if direction == 3:
-        bs = Blaster((-100, screen_height + 100), (arena_x, arena_y + arena_height), 400, 500, 600, 90, 1)
+        bs = Blaster((-100, screen_height + 100), (arena_x, arena_y + arena_height), 400, 500, 600, 90, (100, 240))
         bs.look_at(player.rect.center)
         bs.add(blasters)
 
     if direction == 4:
-        bs = Blaster((screen_width + 100, screen_height + 100), (arena_x + arena_width, arena_y + arena_height), 400, 500, 600, 90, 1)
+        bs = Blaster((screen_width + 100, screen_height + 100), (arena_x + arena_width, arena_y + arena_height), 400, 500, 600, 90, (100, 240))
         bs.look_at(player.rect.center)
         bs.add(blasters)
 
+def spawn_bs_pattern_5():
+    direction = random.choice([1, 2, 3])
+    if direction == 1:
+        bs = Blaster((-240, arena_height+100), (0, arena_height+100), 400, 500, 400, 90, (100, 240))
+        bs.add(blasters)
+
+    if direction == 2:
+        bs = Blaster((-240, arena_height+200), (0, arena_height+200), 400, 500, 400, 90, (100, 240))
+        bs.add(blasters)
+
+    if direction == 3:
+        bs = Blaster((-240, arena_height+300), (0, arena_height+300), 400, 500, 400, 90, (100, 240))
+        bs.add(blasters)
+
+def spawn_bs_pattern_6():
+    for i in range(9):
+        p_x = player.x
+        p_y = player.y
+
+        x = -500 * math.sin(i / 3) + p_x
+        y = -500 * math.cos(i / 3) + p_y
+
+        bs = Blaster((-100, -100), (x, y), 400, 500, 600, i * 19, (35, 150))
+        bs.add(blasters)
+
+
+
+def spawn_bs_pattern_7():
+    global count
+    count += 1
+    bs = Blaster((arena_x + count * 70, -100), ((arena_x + count * 70, 100)), 100, 800, 0, 0, (70, 240))
+    bs.add(blasters)
+
+def increase_arena():
+    global  count, arena_width
+    count += 1
+    arena_width = count + 300
 
 # 클래스 변수
 player = Player(screen_width / 2, screen_height / 2 + 150)
 rb = None
 type = "jump"
+x = 0
+y = 0
 
 bones = pygame.sprite.Group()
 clock = pygame.time.Clock()
 blasters = pygame.sprite.Group()
+PATTERN_EVENT = pygame.USEREVENT + 99
+
+manager = PatternManager()
+manager.add(spawn_bone_pattern_4, 30, 100)
+manager.add(spawn_bs_pattern_1, 1, 1)
+manager.add(spawn_bs_pattern_2, 1, 1)
+manager.add(spawn_bs_pattern_1, 1, 1)
+manager.add(spawn_bs_pattern_3, 100, 1)
+manager.add(increase_arena, 1, 400, delay_ms=1000)
+
+manager.add(spawn_bone_pattern_1, 800, 10, delay_ms=5000)
+manager.add(spawn_bone_pattern_2, 800, 10, delay_ms=5000)
+manager.add(spawn_bs_pattern_5, 1000, 10, delay_ms=5000)
+manager.add(spawn_bone_pattern_3, 900, 10)
+
+manager.add(spawn_bone_pattern_1, 700, 10)
+manager.add(spawn_bone_pattern_2, 800, 20)
+manager.add(spawn_bs_pattern_4, 1000, 10)
+manager.add(spawn_bone_pattern_5_1, 30, 30)
+manager.add(spawn_bone_pattern_5_2, 30, 30)
+
+manager.add(spawn_bs_pattern_7, 120, 9)
+manager.add(spawn_bs_pattern_3, 30, 1)
+manager.add(spawn_bs_pattern_6, 1500, 3)
+
+
+
 
 # 보스 패턴 관련 변수
-bone_pattern_1 = pygame.USEREVENT + 1
-bone_pattern_2 = pygame.USEREVENT + 2
-bone_pattern_3 = pygame.USEREVENT + 3
-bone_pattern_4 = pygame.USEREVENT + 4
-bone_pattern_5 = pygame.USEREVENT + 5
 
-blaster_pattern_1 = pygame.USEREVENT + 10
-blaster_pattern_2 = pygame.USEREVENT + 11
 
 # 매인
 running = True
@@ -656,57 +801,13 @@ while running:
         if event.type == pygame.QUIT:
             running = False
         #보스전 패턴
-        if event.type == bone_pattern_1:
-            spawn_bone_pattern_1()
-            player.x = screen_width / 2
-            type = "only_jump"
-
-        if event.type == bone_pattern_2:
-            spawn_bone_pattern_2()
-            player.x = screen_width / 2
-            type = "only_jump"
-
-        if event.type == bone_pattern_3:
-            spawn_bone_pattern_3()
-            type = "jump"
-
-        if event.type == bone_pattern_4:
-            spawn_bone_pattern_4()
-
-        if event.type == bone_pattern_5:
-            spawn_bone_pattern_5("left")
-
-        if event.type == blaster_pattern_1:
-            spawn_bs_pattern_4()
+        if event.type == PATTERN_EVENT:
+            manager.on_event()
 
         if event.type == pygame.KEYDOWN:
 
            if event.key == pygame.K_1:
-                start_pattern(blaster_pattern_1, 800, 10)
-
-           if event.key == pygame.K_2:
-                start_pattern(bone_pattern_2, 800, 10)
-                is_jump = True
-                type = "only_jump"
-
-           if event.key == pygame.K_3:
-                rb = RisingBone("up", (300, 500), 150, 500)
-                is_jump = False
-                rb.build_warn()
-
-           if event.key == pygame.K_4:
-                is_jump = True
-                type = "aa"
-                start_pattern(bone_pattern_3, 900, 10)
-
-           if event.key == pygame.K_5:
-                start_pattern(bone_pattern_4, 30, 45)
-                is_jump = False
-
-           if event.key == pygame.K_6:
-                start_pattern(bone_pattern_5, 30, 30)
-                is_jump = True
-                type = "aa"
+                manager.start()
 
            if event.key == pygame.K_r:
                 ouch = 0
@@ -719,6 +820,7 @@ while running:
             if event.key == pygame.K_SPACE:
                 player.jump_cut()
 
+    manager.update(bones, blasters, rb)
 
     # 그리기
     screen.fill((0, 0, 0))
@@ -752,6 +854,8 @@ while running:
     ouch_text = myFont.render(str(ouch), True, (255, 0, 0))
     screen.blit(ouch_text, (0, 0))
 
+    arena_x = (screen_width - arena_width) / 2
+    arena = pygame.Rect(arena_x, arena_y, arena_width, arena_height)
     pygame.draw.rect(screen, (255, 255, 255), arena, 5)
 
     pygame.display.update()
