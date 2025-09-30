@@ -7,6 +7,10 @@ import os
 pygame.init()
 # 변수
 image_path = os.path.join("C:\\Users\\USER\\PycharmProjects\\pythonProject\\Sanz\\source\\image")
+font_path = os.path.join("C:\\Users\\USER\\PycharmProjects\\pythonProject\\Sanz\\source\\font\\comicsans.ttf")
+
+sans = pygame.image.load(os.path.join(image_path, "sans.png"))
+sans = pygame.transform.scale(sans, (200, 200))
 
 # 스크린
 screen_width = 1280
@@ -16,13 +20,12 @@ screen = pygame.display.set_mode((screen_width, screen_height))
 arena_width = 300  # 700
 arena_height = 300
 arena_x = (screen_width - arena_width) / 2
-arena_y = screen_height - (arena_height + 150)
-
+arena_y = screen_height - (arena_height + 150) + 70
 count = 0
 
 is_jump= False
 ouch = 0
-myFont = pygame.font.SysFont(None, 50)
+myFont = pygame.font.Font(font_path, 25)
 
 ####################################################
 # 클래스
@@ -56,7 +59,9 @@ class Player(pygame.sprite.Sprite):  # 플레이어
         self.time = 0
 
         self.gravity = False
-        self.surf = pygame.Surface((self.width, self.height))
+        self.surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        self.surf.fill((255, 255, 255, 255))  # 불투명 흰색으로 채움
+        self.mask = pygame.mask.from_surface(self.surf)
         self.mask = pygame.mask.from_surface(self.surf)
 
     def move(self):
@@ -391,12 +396,11 @@ class Blaster(pygame.sprite.Sprite):   # size = 100, 240
         if thickness <= 0:
             self.mask = None
             self.beam_rect = None
-            return
+        L = max(1, min(1500, int(length)))  # 길이 클램프
+        T = max(1, min(256, int(thickness)))  # 두께 클램프 (너무 크지 않게)
 
-        L = max(1, int(length))
-        T = max(1, int(thickness))
-
-        scaled  = pygame.transform.smoothscale(self.beam_base, (T, L))
+        # 굳이 smoothscale 필요 없으면 일반 scale이 더 안전/빠름
+        scaled = pygame.transform.scale(self.beam_base, (T, L))
         rotated = pygame.transform.rotate(scaled, self.rotate)
 
         off = pygame.Vector2(0, L/2).rotate(-self.rotate)
@@ -664,23 +668,23 @@ def spawn_bone_pattern_5_2():
 
 
 def spawn_bs_pattern_1():
-    bs = Blaster((arena_x + arena_width - 70, -100), (arena_x + arena_width - 70, 200), 400, 800, 700, 0, (70, 210))
+    bs = Blaster((arena_x + arena_width - 70, -100), (arena_x + arena_width - 70, 200), 400, 600, 400, 0, (70, 210))
     bs.add(blasters)
 
-    bs = Blaster((arena_x + 70, -100), (arena_x + 70, 200), 400, 800, 700, 0, (70, 210))
+    bs = Blaster((arena_x + 70, -100), (arena_x + 70, 200), 400, 600, 400, 0, (70, 210))
     bs.add(blasters)
 
-    bs = Blaster((-100, arena_y + 70), (200, arena_y + 70), 400, 800, 700, 90, (70, 210))
+    bs = Blaster((-100, arena_y + 70), (200, arena_y + 70), 400, 600, 400, 90, (70, 210))
     bs.add(blasters)
 
-    bs = Blaster((-100, arena_y + arena_height - 70), (200, arena_y + arena_height - 70), 400, 800, 700, 90, (70, 210))
+    bs = Blaster((-100, arena_y + arena_height - 70), (200, arena_y + arena_height - 70), 400, 600, 400, 90, (70, 210))
     bs.add(blasters)
 
 def spawn_bs_pattern_2():
-    bs = Blaster((arena_x - 500, arena_y - 500), (arena_x - 100, arena_y - 100), 400, 800, 700, 45, (100, 240))
+    bs = Blaster((arena_x - 500, arena_y - 500), (arena_x - 100, arena_y - 100), 400, 600, 400, 45, (100, 240))
     bs.add(blasters)
 
-    bs = Blaster((arena_x + arena_width + 500, arena_y - 500), (arena_x + arena_width + 100, arena_y - 100), 400, 800, 700, -45, (100, 240))
+    bs = Blaster((arena_x + arena_width + 500, arena_y - 500), (arena_x + arena_width + 100, arena_y - 100), 400, 600, 400, -45, (100, 240))
     bs.add(blasters)
 
 def spawn_bs_pattern_3():
@@ -715,15 +719,15 @@ def spawn_bs_pattern_4():
 def spawn_bs_pattern_5():
     direction = random.choice([1, 2, 3])
     if direction == 1:
-        bs = Blaster((-240, arena_height+100), (0, arena_height+100), 400, 500, 400, 90, (100, 240))
+        bs = Blaster((-240, arena_height + arena_y - 30), (0, arena_height + arena_y - 30), 400, 500, 400, 90, (100, 240))
         bs.add(blasters)
 
     if direction == 2:
-        bs = Blaster((-240, arena_height+200), (0, arena_height+200), 400, 500, 400, 90, (100, 240))
+        bs = Blaster((-240, arena_height/2 + arena_y), (0, arena_height/2 + arena_y), 400, 500, 400, 90, (100, 240))
         bs.add(blasters)
 
     if direction == 3:
-        bs = Blaster((-240, arena_height+300), (0, arena_height+300), 400, 500, 400, 90, (100, 240))
+        bs = Blaster((-240, arena_y + 30), (0, arena_y + 30), 400, 500, 400, 90, (100, 240))
         bs.add(blasters)
 
 def spawn_bs_pattern_6():
@@ -745,10 +749,17 @@ def spawn_bs_pattern_7():
     bs = Blaster((arena_x + count * 70, -100), ((arena_x + count * 70, 100)), 100, 800, 0, 0, (70, 240))
     bs.add(blasters)
 
+#########################################################
+
 def increase_arena():
     global  count, arena_width
     count += 1
     arena_width = count + 300
+
+def display_text():
+    global myFont
+
+
 
 # 클래스 변수
 player = Player(screen_width / 2, screen_height / 2 + 150)
@@ -767,15 +778,15 @@ manager.add(spawn_bone_pattern_4, 30, 100)
 manager.add(spawn_bs_pattern_1, 1, 1)
 manager.add(spawn_bs_pattern_2, 1, 1)
 manager.add(spawn_bs_pattern_1, 1, 1)
-manager.add(spawn_bs_pattern_3, 100, 1)
+manager.add(spawn_bs_pattern_3, 100, 1, delay_ms=1000)
 manager.add(increase_arena, 1, 400, delay_ms=1000)
 
-manager.add(spawn_bone_pattern_1, 800, 10, delay_ms=5000)
-manager.add(spawn_bone_pattern_2, 800, 10, delay_ms=5000)
-manager.add(spawn_bs_pattern_5, 1000, 10, delay_ms=5000)
-manager.add(spawn_bone_pattern_3, 900, 10)
+manager.add(spawn_bone_pattern_1, 800, 10, delay_ms=2000)
+manager.add(spawn_bone_pattern_2, 800, 10, delay_ms=2000)
+manager.add(spawn_bs_pattern_5, 1000, 10, delay_ms=2000)
+manager.add(spawn_bone_pattern_3, 900, 10, delay_ms=5000)
 
-manager.add(spawn_bone_pattern_1, 700, 10)
+manager.add(spawn_bone_pattern_1, 700, 10, delay_ms=2000)
 manager.add(spawn_bone_pattern_2, 800, 20)
 manager.add(spawn_bs_pattern_4, 1000, 10)
 manager.add(spawn_bone_pattern_5_1, 30, 30)
@@ -785,12 +796,80 @@ manager.add(spawn_bs_pattern_7, 120, 9)
 manager.add(spawn_bs_pattern_3, 30, 1)
 manager.add(spawn_bs_pattern_6, 1500, 3)
 
+def display():
+    display_text = ""
+    text = "Here we go"
 
 
 
-# 보스 패턴 관련 변수
+
+def start():
+    global running
+    speed = 3
+    counter = 0
+    Opening_font = pygame.font.Font(font_path, 50)
+    message = "Here we go"
+    done = False
+
+    running = True
+    while running:
+        pygame.time.Clock().tick(60)
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_SPACE:
+                    running = False
+                    break
+
+        if counter < speed * len(message):
+            counter += 1
+        else:
+            pass
+
+        snip = Opening_font.render(message[0:int(counter // speed)], True, (255, 255, 255))
+        screen.blit(snip, (450, 200))
+
+        pygame.display.update()
 
 
+
+def end():
+    global running
+    speed = 3
+    counter = 0
+    Opening_font = pygame.font.Font(font_path, 50)
+    message = "Game Over"
+    done = False
+
+    running = True
+    while running:
+        pygame.time.Clock().tick(60)
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_SPACE:
+                    running = False
+                    break
+
+        if counter < speed * len(message):
+            counter += 1
+        else:
+            pass
+
+        snip = Opening_font.render(message[0:int(counter // speed)], True, (255, 255, 255))
+        screen.blit(snip, (450, 200))
+
+        pygame.display.update()
+    pygame.quit()
+
+
+start()
 # 매인
 running = True
 while running:
@@ -820,19 +899,23 @@ while running:
             if event.key == pygame.K_SPACE:
                 player.jump_cut()
 
-    manager.update(bones, blasters, rb)
+    if manager != None:
+        manager.update(bones, blasters, rb)
 
     # 그리기
     screen.fill((0, 0, 0))
+    screen.blit(sans, (550, 100))
 
-    if is_jump == True:
-        player.jumping_move(type)
-    else:
-        player.move()
+    if player != None:
+
+        if is_jump == True:
+            player.jumping_move(type)
+        else:
+            player.move()
 
 
-    player.draw()
-    player.colid()
+        player.draw()
+        player.colid()
 
     for b in bones:
         b.update()
@@ -850,14 +933,27 @@ while running:
         bs.update()
         bs.draw(screen)
 
-
-    ouch_text = myFont.render(str(ouch), True, (255, 0, 0))
-    screen.blit(ouch_text, (0, 0))
+    ouch_text = myFont.render(str(100-ouch) + "/100", True, (255, 255, 255))
 
     arena_x = (screen_width - arena_width) / 2
     arena = pygame.Rect(arena_x, arena_y, arena_width, arena_height)
     pygame.draw.rect(screen, (255, 255, 255), arena, 5)
 
+    hp_x = (screen_width - arena_width) / 2
+    hp_y = arena_y + arena_height + 40
+    pygame.draw.rect(screen, (255, 0, 0), (hp_x, hp_y, 200, 20), 0)
+    pygame.draw.rect(screen, (255, 255, 0), (hp_x, hp_y, 200 - ouch*2, 20), 0)
+
+    screen.blit(ouch_text, (hp_x + 210, hp_y))
+
+    if ouch >= 100:
+        screen.fill((0, 0, 0))
+        end()
+        break
+
     pygame.display.update()
+
+
+
 
 pygame.quit()
