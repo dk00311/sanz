@@ -6,8 +6,8 @@ import os
 ##########################
 pygame.init()
 # 변수
-image_path = os.path.join("C:\\Users\\USER\\PycharmProjects\\pythonProject\\Sanz\\source\\image")
-font_path = os.path.join("C:\\Users\\USER\\PycharmProjects\\pythonProject\\Sanz\\source\\font\\comicsans.ttf")
+image_path = os.path.join("source\\image")
+font_path = os.path.join("source\\font\\comicsans.ttf")
 
 sans = pygame.image.load(os.path.join(image_path, "sans.png"))
 sans = pygame.transform.scale(sans, (200, 200))
@@ -26,6 +26,8 @@ count = 0
 is_jump= False
 ouch = 0
 myFont = pygame.font.Font(font_path, 25)
+
+pos = [1, 2, 3]
 
 ####################################################
 # 클래스
@@ -46,7 +48,7 @@ class Player(pygame.sprite.Sprite):  # 플레이어
         self.gravity = 1500
 
         self.jump_force_max = 3000
-        self.jump_force_rate = 4500
+        self.jump_force_rate = 4000
         self.jump_force_duration = 0.23
 
         self.hover_time_max = 0.2  # 현재 정점정지 남은 시간
@@ -132,12 +134,11 @@ class Player(pygame.sprite.Sprite):  # 플레이어
         key_input = pygame.key.get_pressed()
 
         # 좌우 이동 가능 체크
-        if self.type != "only_jump":
-            if key_input[pygame.K_a] and self.rect.x >= arena_x + 5:
-                to_x = -300 * dt
+        if key_input[pygame.K_a] and self.rect.x >= arena_x + 5:
+            to_x = -300 * dt
 
-            if key_input[pygame.K_d] and self.rect.x <= (arena_x + arena_width) - (self.width + 5):
-                to_x = 300 * dt
+        if key_input[pygame.K_d] and self.rect.x <= (arena_x + arena_width) - (self.width + 5):
+            to_x = 300 * dt
 
         # 점프
         if self.jump_pressed:
@@ -519,7 +520,6 @@ class PatternManager:
             type = "A"
 
         elif self.active_func == spawn_bone_pattern_1 or self.active_func ==  spawn_bone_pattern_2:
-            player.x = screen_width / 2
             is_jump = True
             type = "only_jump"
 
@@ -717,18 +717,23 @@ def spawn_bs_pattern_4():
         bs.add(blasters)
 
 def spawn_bs_pattern_5():
-    direction = random.choice([1, 2, 3])
+    global pos
+
+    direction = random.choice(pos)
     if direction == 1:
         bs = Blaster((-240, arena_height + arena_y - 30), (0, arena_height + arena_y - 30), 400, 500, 400, 90, (100, 240))
         bs.add(blasters)
+        pos = [2, 3]
 
     if direction == 2:
         bs = Blaster((-240, arena_height/2 + arena_y), (0, arena_height/2 + arena_y), 400, 500, 400, 90, (100, 240))
         bs.add(blasters)
+        pos = [1, 3]
 
     if direction == 3:
         bs = Blaster((-240, arena_y + 30), (0, arena_y + 30), 400, 500, 400, 90, (100, 240))
         bs.add(blasters)
+        pos = [1, 2]
 
 def spawn_bs_pattern_6():
     for i in range(9):
@@ -756,8 +761,9 @@ def increase_arena():
     count += 1
     arena_width = count + 300
 
-def display_text():
-    global myFont
+def wait():
+    global arena_width
+    arena_width = 300
 
 
 
@@ -774,6 +780,7 @@ blasters = pygame.sprite.Group()
 PATTERN_EVENT = pygame.USEREVENT + 99
 
 manager = PatternManager()
+manager.add(wait, 1, 1, delay_ms = 2000)
 manager.add(spawn_bone_pattern_4, 30, 100)
 manager.add(spawn_bs_pattern_1, 1, 1)
 manager.add(spawn_bs_pattern_2, 1, 1)
@@ -786,7 +793,7 @@ manager.add(spawn_bone_pattern_2, 800, 10, delay_ms=2000)
 manager.add(spawn_bs_pattern_5, 1000, 10, delay_ms=2000)
 manager.add(spawn_bone_pattern_3, 900, 10, delay_ms=5000)
 
-manager.add(spawn_bone_pattern_1, 700, 10, delay_ms=2000)
+manager.add(spawn_bone_pattern_1, 800, 15, delay_ms=2000)
 manager.add(spawn_bone_pattern_2, 800, 20)
 manager.add(spawn_bs_pattern_4, 1000, 10)
 manager.add(spawn_bone_pattern_5_1, 30, 30)
@@ -794,7 +801,7 @@ manager.add(spawn_bone_pattern_5_2, 30, 30)
 
 manager.add(spawn_bs_pattern_7, 120, 9)
 manager.add(spawn_bs_pattern_3, 30, 1)
-manager.add(spawn_bs_pattern_6, 1500, 3)
+#manager.add(spawn_bs_pattern_6, 1500, 3)
 
 def display():
     display_text = ""
