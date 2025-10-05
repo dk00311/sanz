@@ -29,6 +29,10 @@ myFont = pygame.font.Font(font_path, 25)
 
 pos = [1, 2, 3]
 
+speed = 10
+counter = 0
+Opening_font = pygame.font.Font(font_path, 50)
+message = "Here we go"
 ####################################################
 # 클래스
 class Player(pygame.sprite.Sprite):  # 플레이어
@@ -42,14 +46,18 @@ class Player(pygame.sprite.Sprite):  # 플레이어
         self.vel_y = 0
         self.color = (255, 0, 0)
 
-        self.on_ground = False
+        if self.y >= arena_y + arena_height - 7:
+            self.on_ground = True
+        else:
+            self.on_ground = False
+
         self.jump_pressed = False
         self.jump_time = 0.0
         self.gravity = 1500
 
-        self.jump_force_max = 3000
+        self.jump_force_max = 2800
         self.jump_force_rate = 4000
-        self.jump_force_duration = 0.23
+        self.jump_force_duration = 0.28
 
         self.hover_time_max = 0.2  # 현재 정점정지 남은 시간
         self.hover_time = 0
@@ -754,10 +762,29 @@ def spawn_bs_pattern_7():
     bs = Blaster((arena_x + count * 70, -100), ((arena_x + count * 70, 100)), 100, 800, 0, 0, (70, 240))
     bs.add(blasters)
 
+def spawn_bs_pattern_8():
+    global count
+    count += 1
+
+    x = -600 * math.sin(count / 3) + arena_x + arena_width / 2
+    y = -600 * math.cos(count / 3) + arena_y + arena_height / 2
+
+    start_x = -800 * math.sin(count / 3) + screen_width / 2
+    start_y = -800 * math.cos(count / 3) + screen_height / 2
+
+    dx = arena_x + arena_width / 2 - x
+    dy = arena_y + arena_height / 2 - y
+    rotate = math.degrees(math.atan2(dx, dy))
+
+    bs = Blaster((start_x, start_y), (x, y), 400, 300, 100, rotate, (35, 150))
+    bs.add(blasters)
+
 #########################################################
 
 def increase_arena():
-    global  count, arena_width
+    global  count, arena_width, message, counter
+    message = "haha"
+    counter = 0
     count += 1
     arena_width = count + 300
 
@@ -801,45 +828,9 @@ manager.add(spawn_bone_pattern_5_2, 30, 30)
 
 manager.add(spawn_bs_pattern_7, 120, 9)
 manager.add(spawn_bs_pattern_3, 30, 1)
-#manager.add(spawn_bs_pattern_6, 1500, 3)
-
-def display():
-    display_text = ""
-    text = "Here we go"
-
-
-
-
-def start():
-    global running
-    speed = 3
-    counter = 0
-    Opening_font = pygame.font.Font(font_path, 50)
-    message = "Here we go"
-    done = False
-
-    running = True
-    while running:
-        pygame.time.Clock().tick(60)
-
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
-
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_SPACE:
-                    running = False
-                    break
-
-        if counter < speed * len(message):
-            counter += 1
-        else:
-            pass
-
-        snip = Opening_font.render(message[0:int(counter // speed)], True, (255, 255, 255))
-        screen.blit(snip, (450, 200))
-
-        pygame.display.update()
+manager.add(wait, 1, 1, delay_ms=2000)
+manager.add(spawn_bs_pattern_8, 110, 19)
+manager.start()
 
 
 
@@ -875,8 +866,6 @@ def end():
         pygame.display.update()
     pygame.quit()
 
-
-start()
 # 매인
 running = True
 while running:
@@ -892,14 +881,11 @@ while running:
 
         if event.type == pygame.KEYDOWN:
 
-           if event.key == pygame.K_1:
-                manager.start()
-
-           if event.key == pygame.K_r:
-                ouch = 0
-
-           if event.key == pygame.K_SPACE and player.on_ground == True:
+            if event.key == pygame.K_SPACE and player.on_ground == True:
                 player.jump()
+
+            if event.key == pygame.K_r:
+                ouch = 0
 
         if event.type == pygame.KEYUP:
 
@@ -912,6 +898,14 @@ while running:
     # 그리기
     screen.fill((0, 0, 0))
     screen.blit(sans, (550, 100))
+
+    if counter < speed * len(message):
+        counter += 1
+    else:
+        pass
+
+    snip = Opening_font.render(message[0:int(counter // speed)], True, (255, 255, 255))
+    screen.blit(snip, (800, 150))
 
     if player != None:
 
